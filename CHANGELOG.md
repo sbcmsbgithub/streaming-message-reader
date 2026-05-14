@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.6.0] - 2026-05-14
+
+### Added
+- **Generic site support** — now matches `*://*/*`; works on any website, not just VTF. Pick any element on the page as the message container using the "Pick Message Area" button.
+- **Generic message extraction** — falls back to `extractMessageGeneric` for non-VTF elements: looks for sender in `<strong>`, `<b>`, and common class-name patterns; strips timestamps; falls back to `"name: body"` splitting.
+- **Generic auto-detect heuristics** — `autoDetectChatContainer` now tries common chat/message list CSS class and id patterns when VTF elements are not present.
+- **Generic seeding** — when no VTF `app-st-compactmessage` elements exist, seeds existing container children as already-spoken so history is not re-read on startup.
+- **Default selector** — pre-filled to the VTF main chat path so VTF users need no manual configuration.
+
+### Changed
+- Observer now passes any newly added element to `handleNode`, which routes to VTF-specific or generic extraction automatically.
+- UI label "Main Chat container" → "Message container (CSS selector)".
+- Picker prompt updated to "Click a message area on the page."
+- Ignore-list placeholder no longer contains example names — replaced with "comma-separated usernames".
+- Top comment block and internal code comments no longer reference personal example names.
+
+---
+
 ## [1.5.0] - 2026-05-13
 
 ### Added
@@ -91,9 +109,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-[1.5.0]: https://github.com/YOUR-USERNAME/vtf-message-reader/releases/tag/v1.5.0
-[1.4.0]: https://github.com/YOUR-USERNAME/vtf-message-reader/releases/tag/v1.4.0
-[1.3.0]: https://github.com/YOUR-USERNAME/vtf-message-reader/releases/tag/v1.3.0
-[1.2.0]: https://github.com/YOUR-USERNAME/vtf-message-reader/releases/tag/v1.2.0
-[1.1.0]: https://github.com/YOUR-USERNAME/vtf-message-reader/releases/tag/v1.1.0
-[1.0.0]: https://github.com/YOUR-USERNAME/vtf-message-reader/releases/tag/v1.0.0
+[1.6.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.6.0
+[1.5.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.5.0
+[1.4.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.4.0
+[1.3.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.3.0
+[1.2.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.2.0
+[1.1.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.1.0
+[1.0.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.0.0

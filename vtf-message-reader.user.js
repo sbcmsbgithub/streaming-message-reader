@@ -1,22 +1,21 @@
 // ==UserScript==
 // @name         VTF Message Reader
 // @namespace    https://vtf.t3live.com/
-// @version      1.5.0
-// @description  Reads VTF (Virtual Trading Floor) Main Chat messages aloud, with playback controls, ignore list, and time/first-name options.
-// @match        https://vtf.t3live.com/*
-// @match        https://*.t3live.com/*
+// @version      1.6.0
+// @description  Reads chat messages aloud on any website. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
+// @match        *://*/*
 // @grant        none
 // @run-at       document-idle
 // @all-frames   false
 // ==/UserScript==
 
 /*
- * VTF Message Reader (v1.5)
+ * VTF Message Reader (v1.6)
  * --------------------------
- *  • Spoken format:         "[<time>] <FirstName>: <message>"
- *      e.g. "10:57 AM Joshua: i shorted some $AMD here"
- *  • Time can be toggled off → "Joshua: i shorted some $AMD here"
- *  • First-name only by default (Joshua Lefler → Joshua), can be toggled.
+ *  • Works on any website — pick any element as the watched container.
+ *  • Spoken format:  "[<time>] <FirstName>: <message>"
+ *  • Time and sender-name announcement are individually toggleable.
+ *  • First-name only by default, can be toggled.
  *  • Playback controls: ▶ Start / ⏸ Pause / ⏭ Skip / ⏹ Stop  (always visible).
  *  • Settings (voice, rate, volume, ignore list…) collapse independently.
  *  • Ignore list = comma-separated usernames (matched on full or first name).
@@ -46,11 +45,11 @@
     const STORAGE_KEY = 'vtf_reader_config_v1';
     const defaults = {
       enabled: false,
-      selector: '',
+      selector: 'as-split-area.alert-chat-box.as-split-area:nth-of-type(1) > as-split.as-percent.as-vertical > as-split-area.chat-box.as-split-area:nth-of-type(2) > app-chat > div.chat.d-flex > app-roomscroller',
       rate: 1.0, pitch: 1.0, volume: 1.0,
       voiceURI: '',
       readSender: true,
-      firstNameOnly: true,        // NEW: speak first name only ("Joshua Lefler" → "Joshua")
+      firstNameOnly: true,
       announceTime: false,        // NEW: prepend "[10:57 AM]" to spoken text
       skipOwnMessages: true,
       myUsername: '',
@@ -279,6 +278,49 @@
       return { fullSender, sender: spokenSender, body, timeText };
     }
 
+    function extractMessageGeneric(node) {
+      if (!node) return null;
+      const raw = (node.innerText || node.textContent || '')
+        .replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+      if (!raw || raw.length < 2) return null;
+
+      let sender = '';
+      const senderEl = node.querySelector(
+        'strong, b, [class*="sender" i], [class*="author" i], ' +
+        '[class*="username" i], [class*="user-name" i], [class*="display-name" i], [class*="name" i]'
+      );
+      if (senderEl) {
+        const t = (senderEl.innerText || '').trim();
+        if (t && t.length < 80) sender = t.replace(/[:·|>]+$/, '').trim();
+      }
+
+      let timeText = '';
+      const tsMatch = raw.match(TS_BRACKET) || raw.match(TS_BARE);
+      if (tsMatch && tsMatch.length) timeText = tsMatch[0].replace(/[\[\]]/g, '').trim();
+
+      let body = raw.replace(TS_BRACKET, ' ').replace(TS_BARE, ' ')
+                    .replace(/\s+/g, ' ').trim();
+      if (!body) return null;
+
+      if (sender) {
+        const senderRe = new RegExp('^' + escapeRegex(sender) + '\\s*[:·|>-]?\\s*', 'i');
+        let prev;
+        do { prev = body; body = body.replace(senderRe, '').trim(); } while (body !== prev);
+      }
+      if (!sender) {
+        const m = body.match(/^\s*([^:\n]{1,60}):\s*(.+)/s);
+        if (m) { sender = m[1].trim(); body = m[2].trim(); }
+      }
+
+      if (!body || body.length < 2) return null;
+      if (body.length > config.maxLength) body = body.slice(0, config.maxLength) + '…';
+
+      const fullSender = sender;
+      let spokenSender = sender;
+      if (config.firstNameOnly && spokenSender) spokenSender = spokenSender.split(/\s+/)[0];
+      return { fullSender, sender: spokenSender, body, timeText };
+    }
+
     function isIgnoredUser(fullSender) {
       if (!fullSender) return false;
       const sLower = fullSender.toLowerCase();
@@ -295,8 +337,8 @@
           .map(s => s.trim().toLowerCase()).filter(Boolean);
         for (const name of list) {
           if (!name) continue;
-          // Match either full name OR first-name token (so "Dennis" hides
-          // both "Dennis" and "Dennis Smith").
+          // Match either full name OR first-name token (e.g. "alice" hides
+          // both "alice" and "alice smith").
           if (sLower === name) return true;
           if (sFirst === name.split(/\s+/)[0]) return true;
         }
@@ -308,17 +350,25 @@
     // Container detection
     // -------------------------------------------------------------------------
     function autoDetectChatContainer() {
+      // VTF-specific
       const scroller = document.querySelector('app-roomscroller');
       if (scroller) return scroller;
-      const msgs = document.querySelectorAll('app-st-compactmessage');
-      if (msgs.length === 0) return null;
-      let el = msgs[0].parentElement;
-      while (el && el !== document.body) {
-        const count = el.querySelectorAll('app-st-compactmessage').length;
-        if (count >= Math.min(3, msgs.length)) return el;
-        el = el.parentElement;
+      const vtfMsgs = document.querySelectorAll('app-st-compactmessage');
+      if (vtfMsgs.length > 0) {
+        let el = vtfMsgs[0].parentElement;
+        while (el && el !== document.body) {
+          const count = el.querySelectorAll('app-st-compactmessage').length;
+          if (count >= Math.min(3, vtfMsgs.length)) return el;
+          el = el.parentElement;
+        }
+        return vtfMsgs[0].parentElement;
       }
-      return msgs[0].parentElement;
+      // Generic: look for common chat/message list patterns
+      return document.querySelector(
+        '[class*="message-list" i], [class*="chat-list" i], [class*="message-feed" i], ' +
+        '[class*="chat-feed" i], [class*="msg-list" i], ' +
+        '[id*="message-list" i], [id*="chat-list" i], [id*="messages" i]'
+      );
     }
 
     // -------------------------------------------------------------------------
@@ -333,8 +383,9 @@
       if (recentSpoken.length > RECENT_MAX) recentSet.delete(recentSpoken.shift());
     };
 
-    function handleRootNode(root) {
-      const msg = extractMessageFromRoot(root);
+    function handleNode(node) {
+      const isVtf = node.tagName && node.tagName.toLowerCase() === 'app-st-compactmessage';
+      const msg = isVtf ? extractMessageFromRoot(node) : extractMessageGeneric(node);
       if (!msg) return;
       const key = (msg.fullSender + '|' + msg.body).slice(0, 500);
       if (recentSet.has(key)) return;
@@ -346,7 +397,6 @@
       }
       if (!config.enabled) return;
 
-      // Build the spoken text: [time] FirstName: body
       const parts = [];
       if (config.announceTime && msg.timeText) parts.push(msg.timeText);
       if (config.readSender && msg.sender)     parts.push(msg.sender + ':');
@@ -365,24 +415,35 @@
       }
       if (!targetEl) targetEl = autoDetectChatContainer();
       if (!targetEl) {
-        setStatus('Main Chat not found — retrying…');
+        setStatus('Message container not found — retrying…');
         scheduleRetry(); return;
       }
       // Seed existing messages so we don't read history.
-      targetEl.querySelectorAll('app-st-compactmessage').forEach(root => {
-        const m = extractMessageFromRoot(root);
-        if (m) markSpoken((m.fullSender + '|' + m.body).slice(0, 500));
-      });
+      const vtfExisting = targetEl.querySelectorAll('app-st-compactmessage');
+      if (vtfExisting.length > 0) {
+        vtfExisting.forEach(root => {
+          const m = extractMessageFromRoot(root);
+          if (m) markSpoken((m.fullSender + '|' + m.body).slice(0, 500));
+        });
+      } else {
+        Array.from(targetEl.children).forEach(child => {
+          const text = ((child.innerText || child.textContent) || '').trim();
+          if (text) markSpoken(text.slice(0, 500));
+        });
+      }
       observer = new MutationObserver(mutations => {
         for (const m of mutations) {
           m.addedNodes.forEach(n => {
             if (n.nodeType !== 1) return;
+            // VTF: handle app-st-compactmessage directly or nested
             const root = getMessageRoot(n);
-            if (root) { handleRootNode(root); return; }
+            if (root) { handleNode(root); return; }
             try {
-              n.querySelectorAll && n.querySelectorAll('app-st-compactmessage')
-                .forEach(handleRootNode);
+              const vtfMsgs = n.querySelectorAll && n.querySelectorAll('app-st-compactmessage');
+              if (vtfMsgs && vtfMsgs.length) { vtfMsgs.forEach(handleNode); return; }
             } catch {}
+            // Generic: treat the added element itself as a message
+            handleNode(n);
           });
         }
       });
@@ -425,7 +486,7 @@
       document.addEventListener('mousemove', onPickerMove, true);
       document.addEventListener('click', onPickerClick, true);
       document.addEventListener('keydown', onPickerKey, true);
-      setStatus('Click the Main Chat list. (Esc to cancel)');
+      setStatus('Click a message area on the page. (Esc to cancel)');
     }
     function stopPicker() {
       pickerActive = false;
@@ -594,7 +655,7 @@
           <span>Read new messages as they arrive</span>
         </label>
 
-        <label>Main Chat container
+        <label>Message container (CSS selector)
           <input type="text" id="vtf-selector" placeholder="auto-detect active…">
         </label>
         <div class="row">
@@ -624,7 +685,7 @@
         </label>
         <label class="toggle">
           <input type="checkbox" id="vtf-first-name">
-          <span>First name only (e.g. "Joshua" not "Joshua Lefler")</span>
+          <span>First name only (e.g. "Alice" not "Alice Smith")</span>
         </label>
         <label class="toggle">
           <input type="checkbox" id="vtf-announce-time">
@@ -642,7 +703,7 @@
         </label>
 
         <label>Skip messages from these users (comma-separated)
-          <textarea id="vtf-ignore-users" rows="2" placeholder="e.g. Dennis, Pat H, Joshua Lefler"></textarea>
+          <textarea id="vtf-ignore-users" rows="2" placeholder="comma-separated usernames"></textarea>
         </label>
         <div class="ignore-row">
           <input type="text" id="vtf-ignore-add" placeholder="add a username…">
