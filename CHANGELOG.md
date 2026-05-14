@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **VTF Message Reader** are documented here.
+All notable changes to **Message Reader** are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -16,8 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Default selector** — pre-filled to the VTF main chat path so VTF users need no manual configuration.
 
 ### Changed
+- **Project renamed** from `vtf-message-reader` to `message-reader`. Script file renamed to `message-reader.user.js`. Panel title, console prefix, `@name`, `@namespace`, and `localStorage` key updated accordingly.
+- Storage key changed from `vtf_reader_config_v1` to `message_reader_config_v1` (existing users will need to re-enter settings once).
 - Observer now passes any newly added element to `handleNode`, which routes to VTF-specific or generic extraction automatically.
-- UI label "Main Chat container" → "Message container (CSS selector)".
+- UI label "Main Chat container" → "Message container (CSS selector)". "My VTF username" → "My username".
 - Picker prompt updated to "Click a message area on the page."
 - Ignore-list placeholder no longer contains example names — replaced with "comma-separated usernames".
 - Top comment block and internal code comments no longer reference personal example names.
@@ -109,10 +111,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-[1.6.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.6.0
-[1.5.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.5.0
-[1.4.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.4.0
-[1.3.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.3.0
-[1.2.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.2.0
-[1.1.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.1.0
-[1.0.0]: https://github.com/sbcmsbgithub/vtf-message-reader/releases/tag/v1.0.0
+[1.6.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.6.0
+[1.5.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.5.0
+[1.4.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.4.0
+[1.3.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.3.0
+[1.2.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.2.0
+[1.1.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.1.0
+[1.0.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.0.0
