@@ -1,22 +1,21 @@
 // ==UserScript==
-// @name         VTF Message Reader
-// @namespace    https://vtf.t3live.com/
-// @version      1.5.0
-// @description  Reads VTF (Virtual Trading Floor) Main Chat messages aloud, with playback controls, ignore list, and time/first-name options.
-// @match        https://vtf.t3live.com/*
-// @match        https://*.t3live.com/*
+// @name         Message Reader
+// @namespace    https://github.com/sbcmsbgithub/message-reader
+// @version      1.6.0
+// @description  Reads chat messages aloud on any website. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
+// @match        *://*/*
 // @grant        none
 // @run-at       document-idle
 // @all-frames   false
 // ==/UserScript==
 
 /*
- * VTF Message Reader (v1.5)
+ * Message Reader (v1.6)
  * --------------------------
- *  • Spoken format:         "[<time>] <FirstName>: <message>"
- *      e.g. "10:57 AM Joshua: i shorted some $AMD here"
- *  • Time can be toggled off → "Joshua: i shorted some $AMD here"
- *  • First-name only by default (Joshua Lefler → Joshua), can be toggled.
+ *  • Works on any website — pick any element as the watched container.
+ *  • Spoken format:  "[<time>] <FirstName>: <message>"
+ *  • Time and sender-name announcement are individually toggleable.
+ *  • First-name only by default, can be toggled.
  *  • Playback controls: ▶ Start / ⏸ Pause / ⏭ Skip / ⏹ Stop  (always visible).
  *  • Settings (voice, rate, volume, ignore list…) collapse independently.
  *  • Ignore list = comma-separated usernames (matched on full or first name).
@@ -26,11 +25,11 @@
 (function () {
   'use strict';
 
-  const LOG = (...a) => console.log('[VTF Reader]', ...a);
-  const ERR = (...a) => console.error('[VTF Reader]', ...a);
+  const LOG = (...a) => console.log('[Message Reader]', ...a);
+  const ERR = (...a) => console.error('[Message Reader]', ...a);
 
-  if (window.__vtfReaderLoaded) { LOG('Already loaded.'); return; }
-  window.__vtfReaderLoaded = true;
+  if (window.__messageReaderLoaded) { LOG('Already loaded.'); return; }
+  window.__messageReaderLoaded = true;
 
   function waitForBody(cb, tries = 0) {
     if (document.body) cb();
@@ -43,14 +42,14 @@
     // -------------------------------------------------------------------------
     // Config
     // -------------------------------------------------------------------------
-    const STORAGE_KEY = 'vtf_reader_config_v1';
+    const STORAGE_KEY = 'message_reader_config_v1';
     const defaults = {
       enabled: false,
-      selector: '',
+      selector: 'as-split-area.alert-chat-box.as-split-area:nth-of-type(1) > as-split.as-percent.as-vertical > as-split-area.chat-box.as-split-area:nth-of-type(2) > app-chat > div.chat.d-flex > app-roomscroller',
       rate: 1.0, pitch: 1.0, volume: 1.0,
       voiceURI: '',
       readSender: true,
-      firstNameOnly: true,        // NEW: speak first name only ("Joshua Lefler" → "Joshua")
+      firstNameOnly: true,
       announceTime: false,        // NEW: prepend "[10:57 AM]" to spoken text
       skipOwnMessages: true,
       myUsername: '',
@@ -279,6 +278,49 @@
       return { fullSender, sender: spokenSender, body, timeText };
     }
 
+    function extractMessageGeneric(node) {
+      if (!node) return null;
+      const raw = (node.innerText || node.textContent || '')
+        .replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+      if (!raw || raw.length < 2) return null;
+
+      let sender = '';
+      const senderEl = node.querySelector(
+        'strong, b, [class*="sender" i], [class*="author" i], ' +
+        '[class*="username" i], [class*="user-name" i], [class*="display-name" i], [class*="name" i]'
+      );
+      if (senderEl) {
+        const t = (senderEl.innerText || '').trim();
+        if (t && t.length < 80) sender = t.replace(/[:·|>]+$/, '').trim();
+      }
+
+      let timeText = '';
+      const tsMatch = raw.match(TS_BRACKET) || raw.match(TS_BARE);
+      if (tsMatch && tsMatch.length) timeText = tsMatch[0].replace(/[\[\]]/g, '').trim();
+
+      let body = raw.replace(TS_BRACKET, ' ').replace(TS_BARE, ' ')
+                    .replace(/\s+/g, ' ').trim();
+      if (!body) return null;
+
+      if (sender) {
+        const senderRe = new RegExp('^' + escapeRegex(sender) + '\\s*[:·|>-]?\\s*', 'i');
+        let prev;
+        do { prev = body; body = body.replace(senderRe, '').trim(); } while (body !== prev);
+      }
+      if (!sender) {
+        const m = body.match(/^\s*([^:\n]{1,60}):\s*(.+)/s);
+        if (m) { sender = m[1].trim(); body = m[2].trim(); }
+      }
+
+      if (!body || body.length < 2) return null;
+      if (body.length > config.maxLength) body = body.slice(0, config.maxLength) + '…';
+
+      const fullSender = sender;
+      let spokenSender = sender;
+      if (config.firstNameOnly && spokenSender) spokenSender = spokenSender.split(/\s+/)[0];
+      return { fullSender, sender: spokenSender, body, timeText };
+    }
+
     function isIgnoredUser(fullSender) {
       if (!fullSender) return false;
       const sLower = fullSender.toLowerCase();
@@ -295,8 +337,8 @@
           .map(s => s.trim().toLowerCase()).filter(Boolean);
         for (const name of list) {
           if (!name) continue;
-          // Match either full name OR first-name token (so "Dennis" hides
-          // both "Dennis" and "Dennis Smith").
+          // Match either full name OR first-name token (e.g. "alice" hides
+          // both "alice" and "alice smith").
           if (sLower === name) return true;
           if (sFirst === name.split(/\s+/)[0]) return true;
         }
@@ -308,17 +350,25 @@
     // Container detection
     // -------------------------------------------------------------------------
     function autoDetectChatContainer() {
+      // VTF-specific
       const scroller = document.querySelector('app-roomscroller');
       if (scroller) return scroller;
-      const msgs = document.querySelectorAll('app-st-compactmessage');
-      if (msgs.length === 0) return null;
-      let el = msgs[0].parentElement;
-      while (el && el !== document.body) {
-        const count = el.querySelectorAll('app-st-compactmessage').length;
-        if (count >= Math.min(3, msgs.length)) return el;
-        el = el.parentElement;
+      const siteMsgs = document.querySelectorAll('app-st-compactmessage');
+      if (siteMsgs.length > 0) {
+        let el = siteMsgs[0].parentElement;
+        while (el && el !== document.body) {
+          const count = el.querySelectorAll('app-st-compactmessage').length;
+          if (count >= Math.min(3, siteMsgs.length)) return el;
+          el = el.parentElement;
+        }
+        return siteMsgs[0].parentElement;
       }
-      return msgs[0].parentElement;
+      // Generic: look for common chat/message list patterns
+      return document.querySelector(
+        '[class*="message-list" i], [class*="chat-list" i], [class*="message-feed" i], ' +
+        '[class*="chat-feed" i], [class*="msg-list" i], ' +
+        '[id*="message-list" i], [id*="chat-list" i], [id*="messages" i]'
+      );
     }
 
     // -------------------------------------------------------------------------
@@ -333,8 +383,9 @@
       if (recentSpoken.length > RECENT_MAX) recentSet.delete(recentSpoken.shift());
     };
 
-    function handleRootNode(root) {
-      const msg = extractMessageFromRoot(root);
+    function handleNode(node) {
+      const isVtf = node.tagName && node.tagName.toLowerCase() === 'app-st-compactmessage';
+      const msg = isVtf ? extractMessageFromRoot(node) : extractMessageGeneric(node);
       if (!msg) return;
       const key = (msg.fullSender + '|' + msg.body).slice(0, 500);
       if (recentSet.has(key)) return;
@@ -346,7 +397,6 @@
       }
       if (!config.enabled) return;
 
-      // Build the spoken text: [time] FirstName: body
       const parts = [];
       if (config.announceTime && msg.timeText) parts.push(msg.timeText);
       if (config.readSender && msg.sender)     parts.push(msg.sender + ':');
@@ -365,24 +415,35 @@
       }
       if (!targetEl) targetEl = autoDetectChatContainer();
       if (!targetEl) {
-        setStatus('Main Chat not found — retrying…');
+        setStatus('Message container not found — retrying…');
         scheduleRetry(); return;
       }
       // Seed existing messages so we don't read history.
-      targetEl.querySelectorAll('app-st-compactmessage').forEach(root => {
-        const m = extractMessageFromRoot(root);
-        if (m) markSpoken((m.fullSender + '|' + m.body).slice(0, 500));
-      });
+      const existingMsgs = targetEl.querySelectorAll('app-st-compactmessage');
+      if (existingMsgs.length > 0) {
+        existingMsgs.forEach(root => {
+          const m = extractMessageFromRoot(root);
+          if (m) markSpoken((m.fullSender + '|' + m.body).slice(0, 500));
+        });
+      } else {
+        Array.from(targetEl.children).forEach(child => {
+          const text = ((child.innerText || child.textContent) || '').trim();
+          if (text) markSpoken(text.slice(0, 500));
+        });
+      }
       observer = new MutationObserver(mutations => {
         for (const m of mutations) {
           m.addedNodes.forEach(n => {
             if (n.nodeType !== 1) return;
+            // VTF: handle app-st-compactmessage directly or nested
             const root = getMessageRoot(n);
-            if (root) { handleRootNode(root); return; }
+            if (root) { handleNode(root); return; }
             try {
-              n.querySelectorAll && n.querySelectorAll('app-st-compactmessage')
-                .forEach(handleRootNode);
+              const siteMsgs = n.querySelectorAll && n.querySelectorAll('app-st-compactmessage');
+              if (siteMsgs && siteMsgs.length) { siteMsgs.forEach(handleNode); return; }
             } catch {}
+            // Generic: treat the added element itself as a message
+            handleNode(n);
           });
         }
       });
@@ -425,7 +486,7 @@
       document.addEventListener('mousemove', onPickerMove, true);
       document.addEventListener('click', onPickerClick, true);
       document.addEventListener('keydown', onPickerKey, true);
-      setStatus('Click the Main Chat list. (Esc to cancel)');
+      setStatus('Click a message area on the page. (Esc to cancel)');
     }
     function stopPicker() {
       pickerActive = false;
@@ -484,10 +545,10 @@
     // UI
     // -------------------------------------------------------------------------
     const panel = document.createElement('div');
-    panel.id = 'vtf-reader-panel';
+    panel.id = 'msg-reader-panel';
     panel.innerHTML = `
       <style>
-        #vtf-reader-panel {
+        #msg-reader-panel {
           position: fixed !important; top: 80px !important; right: 16px !important;
           z-index: 2147483647 !important; width: 310px !important;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
@@ -496,160 +557,160 @@
           border-radius: 8px !important;
           box-shadow: 0 8px 24px rgba(0,0,0,0.6) !important; user-select: none !important;
         }
-        #vtf-reader-panel * { box-sizing: border-box; }
-        #vtf-reader-panel header {
+        #msg-reader-panel * { box-sizing: border-box; }
+        #msg-reader-panel header {
           display: flex; align-items: center; justify-content: space-between;
           padding: 8px 12px; background: #13151b; border-bottom: 1px solid #2a2f3a;
           border-radius: 8px 8px 0 0; cursor: move;
         }
-        #vtf-reader-panel h3 {
+        #msg-reader-panel h3 {
           margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
           text-transform: uppercase; color: #ff6b35;
         }
         /* Always-visible playback section */
-        #vtf-reader-panel .playback {
+        #msg-reader-panel .playback {
           padding: 10px 12px; display: grid; gap: 8px;
           border-bottom: 1px solid #2a2f3a;
         }
         /* Collapsible settings section */
-        #vtf-reader-panel .settings { padding: 10px 12px; display: grid; gap: 8px; }
-        #vtf-reader-panel.collapsed .settings { display: none; }
-        #vtf-reader-panel.collapsed .playback { border-bottom: none; }
-        #vtf-reader-panel label { display: grid; gap: 4px; font-size: 11px; color: #9aa3b2; }
-        #vtf-reader-panel input[type="text"], #vtf-reader-panel select, #vtf-reader-panel textarea {
+        #msg-reader-panel .settings { padding: 10px 12px; display: grid; gap: 8px; }
+        #msg-reader-panel.collapsed .settings { display: none; }
+        #msg-reader-panel.collapsed .playback { border-bottom: none; }
+        #msg-reader-panel label { display: grid; gap: 4px; font-size: 11px; color: #9aa3b2; }
+        #msg-reader-panel input[type="text"], #msg-reader-panel select, #msg-reader-panel textarea {
           width: 100%; padding: 5px 7px; background: #0f1116; color: #e6e9ef;
           border: 1px solid #2a2f3a; border-radius: 4px; font-size: 12px;
           font-family: inherit;
         }
-        #vtf-reader-panel textarea { resize: vertical; min-height: 38px; }
-        #vtf-reader-panel input[type="range"] { width: 100%; }
-        #vtf-reader-panel .row { display: flex; gap: 6px; align-items: center; }
-        #vtf-reader-panel .row button { flex: 1; }
-        #vtf-reader-panel button {
+        #msg-reader-panel textarea { resize: vertical; min-height: 38px; }
+        #msg-reader-panel input[type="range"] { width: 100%; }
+        #msg-reader-panel .row { display: flex; gap: 6px; align-items: center; }
+        #msg-reader-panel .row button { flex: 1; }
+        #msg-reader-panel button {
           padding: 6px 8px; background: #2a2f3a; color: #e6e9ef;
           border: 1px solid #3a3f4a; border-radius: 4px; font-size: 11px;
           cursor: pointer; font-weight: 500;
         }
-        #vtf-reader-panel button:hover:not(:disabled) { background: #353b48; }
-        #vtf-reader-panel button:disabled { opacity: 0.4; cursor: not-allowed; }
-        #vtf-reader-panel button.primary { background: #ff6b35; border-color: #ff6b35; color: #fff; }
-        #vtf-reader-panel button.start { background: #22c55e; border-color: #22c55e; color: #fff; }
-        #vtf-reader-panel button.pause { background: #eab308; border-color: #eab308; color: #1a1d24; }
-        #vtf-reader-panel button.skip  { background: #3b82f6; border-color: #3b82f6; color: #fff; }
-        #vtf-reader-panel button.stop  { background: #ef4444; border-color: #ef4444; color: #fff; }
-        #vtf-reader-panel .toggle {
+        #msg-reader-panel button:hover:not(:disabled) { background: #353b48; }
+        #msg-reader-panel button:disabled { opacity: 0.4; cursor: not-allowed; }
+        #msg-reader-panel button.primary { background: #ff6b35; border-color: #ff6b35; color: #fff; }
+        #msg-reader-panel button.start { background: #22c55e; border-color: #22c55e; color: #fff; }
+        #msg-reader-panel button.pause { background: #eab308; border-color: #eab308; color: #1a1d24; }
+        #msg-reader-panel button.skip  { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+        #msg-reader-panel button.stop  { background: #ef4444; border-color: #ef4444; color: #fff; }
+        #msg-reader-panel .toggle {
           display: flex; align-items: center; gap: 8px; cursor: pointer;
           padding: 4px 0; font-size: 12px; color: #e6e9ef;
         }
-        #vtf-reader-panel .pb-state {
+        #msg-reader-panel .pb-state {
           display: flex; align-items: center; justify-content: space-between;
           font-size: 11px; color: #9aa3b2; padding: 4px 8px;
           background: #0f1116; border: 1px solid #2a2f3a; border-radius: 4px;
         }
-        #vtf-reader-panel .pb-state .dot {
+        #msg-reader-panel .pb-state .dot {
           display: inline-block; width: 8px; height: 8px; border-radius: 50%;
           margin-right: 6px; background: #6a7280;
         }
-        #vtf-reader-panel .pb-state.playing .dot { background: #22c55e; animation: vtfpulse 1.2s infinite; }
-        #vtf-reader-panel .pb-state.paused  .dot { background: #eab308; }
-        #vtf-reader-panel .pb-state.stopped .dot { background: #ef4444; }
-        @keyframes vtfpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
-        #vtf-reader-panel .status {
+        #msg-reader-panel .pb-state.playing .dot { background: #22c55e; animation: msgpulse 1.2s infinite; }
+        #msg-reader-panel .pb-state.paused  .dot { background: #eab308; }
+        #msg-reader-panel .pb-state.stopped .dot { background: #ef4444; }
+        @keyframes msgpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+        #msg-reader-panel .status {
           font-size: 10px; color: #6a7280; padding-top: 6px; margin-top: 4px;
           border-top: 1px solid #2a2f3a; word-break: break-all;
         }
-        #vtf-reader-panel .collapse-btn {
+        #msg-reader-panel .collapse-btn {
           background: transparent; border: none; color: #6a7280;
           font-size: 14px; padding: 0 4px; cursor: pointer;
         }
-        #vtf-reader-panel hr.sep { border: 0; border-top: 1px solid #2a2f3a; margin: 2px 0; }
-        #vtf-reader-panel .ignore-row { display: flex; gap: 6px; }
-        #vtf-reader-panel .ignore-row input { flex: 1; }
-        #vtf-reader-panel .ignore-row button { flex: 0 0 auto; padding: 5px 10px; }
+        #msg-reader-panel hr.sep { border: 0; border-top: 1px solid #2a2f3a; margin: 2px 0; }
+        #msg-reader-panel .ignore-row { display: flex; gap: 6px; }
+        #msg-reader-panel .ignore-row input { flex: 1; }
+        #msg-reader-panel .ignore-row button { flex: 0 0 auto; padding: 5px 10px; }
       </style>
 
-      <header id="vtf-reader-header">
-        <h3>VTF Reader</h3>
-        <button class="collapse-btn" id="vtf-collapse" title="Collapse / expand settings">▾</button>
+      <header id="msg-reader-header">
+        <h3>Message Reader</h3>
+        <button class="collapse-btn" id="msg-collapse" title="Collapse / expand settings">▾</button>
       </header>
 
       <!-- ALWAYS VISIBLE: playback controls + state -->
       <div class="playback">
-        <div class="pb-state" id="vtf-pb-state">
-          <span><span class="dot"></span><span id="vtf-pb-label">Idle</span></span>
-          <span id="vtf-pb-queue" style="opacity:0.7;">queue: 0</span>
+        <div class="pb-state" id="msg-pb-state">
+          <span><span class="dot"></span><span id="msg-pb-label">Idle</span></span>
+          <span id="msg-pb-queue" style="opacity:0.7;">queue: 0</span>
         </div>
         <div class="row">
-          <button id="vtf-start" class="start">▶ Start</button>
-          <button id="vtf-pause" class="pause">⏸ Pause</button>
-          <button id="vtf-skip"  class="skip">⏭ Skip</button>
-          <button id="vtf-stop"  class="stop">⏹ Stop</button>
+          <button id="msg-start" class="start">▶ Start</button>
+          <button id="msg-pause" class="pause">⏸ Pause</button>
+          <button id="msg-skip"  class="skip">⏭ Skip</button>
+          <button id="msg-stop"  class="stop">⏹ Stop</button>
         </div>
       </div>
 
       <!-- COLLAPSIBLE: all the settings -->
       <div class="settings">
         <label class="toggle">
-          <input type="checkbox" id="vtf-enabled">
+          <input type="checkbox" id="msg-enabled">
           <span>Read new messages as they arrive</span>
         </label>
 
-        <label>Main Chat container
-          <input type="text" id="vtf-selector" placeholder="auto-detect active…">
+        <label>Message container (CSS selector)
+          <input type="text" id="msg-selector" placeholder="auto-detect active…">
         </label>
         <div class="row">
-          <button id="vtf-pick" class="primary">Pick Message Area</button>
-          <button id="vtf-redetect">Auto-detect</button>
+          <button id="msg-pick" class="primary">Pick Message Area</button>
+          <button id="msg-redetect">Auto-detect</button>
         </div>
         <div class="row">
-          <button id="vtf-test">Test Voice</button>
-          <button id="vtf-clear">Clear Selector</button>
+          <button id="msg-test">Test Voice</button>
+          <button id="msg-clear">Clear Selector</button>
         </div>
 
         <hr class="sep">
 
-        <label>Voice <select id="vtf-voice"></select></label>
-        <label>Rate: <span id="vtf-rate-val">1.00</span>
-          <input type="range" id="vtf-rate" min="0.5" max="2" step="0.05">
+        <label>Voice <select id="msg-voice"></select></label>
+        <label>Rate: <span id="msg-rate-val">1.00</span>
+          <input type="range" id="msg-rate" min="0.5" max="2" step="0.05">
         </label>
-        <label>Volume: <span id="vtf-volume-val">1.00</span>
-          <input type="range" id="vtf-volume" min="0" max="1" step="0.05">
+        <label>Volume: <span id="msg-volume-val">1.00</span>
+          <input type="range" id="msg-volume" min="0" max="1" step="0.05">
         </label>
 
         <hr class="sep">
 
         <label class="toggle">
-          <input type="checkbox" id="vtf-read-sender">
+          <input type="checkbox" id="msg-read-sender">
           <span>Announce sender name</span>
         </label>
         <label class="toggle">
-          <input type="checkbox" id="vtf-first-name">
-          <span>First name only (e.g. "Joshua" not "Joshua Lefler")</span>
+          <input type="checkbox" id="msg-first-name">
+          <span>First name only (e.g. "Alice" not "Alice Smith")</span>
         </label>
         <label class="toggle">
-          <input type="checkbox" id="vtf-announce-time">
+          <input type="checkbox" id="msg-announce-time">
           <span>Announce timestamp (e.g. "10:57 AM")</span>
         </label>
 
         <hr class="sep">
 
         <label class="toggle">
-          <input type="checkbox" id="vtf-skip-own">
+          <input type="checkbox" id="msg-skip-own">
           <span>Skip my own messages</span>
         </label>
-        <label>My VTF username
-          <input type="text" id="vtf-username" placeholder="optional">
+        <label>My username
+          <input type="text" id="msg-username" placeholder="optional">
         </label>
 
         <label>Skip messages from these users (comma-separated)
-          <textarea id="vtf-ignore-users" rows="2" placeholder="e.g. Dennis, Pat H, Joshua Lefler"></textarea>
+          <textarea id="msg-ignore-users" rows="2" placeholder="comma-separated usernames"></textarea>
         </label>
         <div class="ignore-row">
-          <input type="text" id="vtf-ignore-add" placeholder="add a username…">
-          <button id="vtf-ignore-add-btn">+ Add</button>
+          <input type="text" id="msg-ignore-add" placeholder="add a username…">
+          <button id="msg-ignore-add-btn">+ Add</button>
         </div>
 
-        <div class="status" id="vtf-status">Idle.</div>
+        <div class="status" id="msg-status">Idle.</div>
       </div>
     `;
 
@@ -676,7 +737,7 @@
     }
 
     function populateVoiceDropdown() {
-      const sel = panel.querySelector('#vtf-voice');
+      const sel = panel.querySelector('#msg-voice');
       if (!sel) return;
       sel.innerHTML = '';
       voices.forEach(v => {
@@ -691,30 +752,30 @@
     function mountUI() {
       try {
         document.body.appendChild(panel);
-        selectorInput = panel.querySelector('#vtf-selector');
-        statusEl      = panel.querySelector('#vtf-status');
-        pbStateEl     = panel.querySelector('#vtf-pb-state');
-        pbLabelEl     = panel.querySelector('#vtf-pb-label');
-        pbQueueEl     = panel.querySelector('#vtf-pb-queue');
-        btnStart      = panel.querySelector('#vtf-start');
-        btnPause      = panel.querySelector('#vtf-pause');
-        btnSkip       = panel.querySelector('#vtf-skip');
-        btnStop       = panel.querySelector('#vtf-stop');
-        cbEnabled     = panel.querySelector('#vtf-enabled');
+        selectorInput = panel.querySelector('#msg-selector');
+        statusEl      = panel.querySelector('#msg-status');
+        pbStateEl     = panel.querySelector('#msg-pb-state');
+        pbLabelEl     = panel.querySelector('#msg-pb-label');
+        pbQueueEl     = panel.querySelector('#msg-pb-queue');
+        btnStart      = panel.querySelector('#msg-start');
+        btnPause      = panel.querySelector('#msg-pause');
+        btnSkip       = panel.querySelector('#msg-skip');
+        btnStop       = panel.querySelector('#msg-stop');
+        cbEnabled     = panel.querySelector('#msg-enabled');
 
         // Hydrate from config.
         cbEnabled.checked = config.enabled;
-        panel.querySelector('#vtf-selector').value = config.selector;
-        panel.querySelector('#vtf-rate').value = config.rate;
-        panel.querySelector('#vtf-rate-val').textContent = Number(config.rate).toFixed(2);
-        panel.querySelector('#vtf-volume').value = config.volume;
-        panel.querySelector('#vtf-volume-val').textContent = Number(config.volume).toFixed(2);
-        panel.querySelector('#vtf-read-sender').checked = config.readSender;
-        panel.querySelector('#vtf-first-name').checked = config.firstNameOnly;
-        panel.querySelector('#vtf-announce-time').checked = config.announceTime;
-        panel.querySelector('#vtf-skip-own').checked = config.skipOwnMessages;
-        panel.querySelector('#vtf-username').value = config.myUsername;
-        panel.querySelector('#vtf-ignore-users').value = config.ignoreUsers;
+        panel.querySelector('#msg-selector').value = config.selector;
+        panel.querySelector('#msg-rate').value = config.rate;
+        panel.querySelector('#msg-rate-val').textContent = Number(config.rate).toFixed(2);
+        panel.querySelector('#msg-volume').value = config.volume;
+        panel.querySelector('#msg-volume-val').textContent = Number(config.volume).toFixed(2);
+        panel.querySelector('#msg-read-sender').checked = config.readSender;
+        panel.querySelector('#msg-first-name').checked = config.firstNameOnly;
+        panel.querySelector('#msg-announce-time').checked = config.announceTime;
+        panel.querySelector('#msg-skip-own').checked = config.skipOwnMessages;
+        panel.querySelector('#msg-username').value = config.myUsername;
+        panel.querySelector('#msg-ignore-users').value = config.ignoreUsers;
         populateVoiceDropdown();
         updatePlaybackUI();
 
@@ -736,57 +797,57 @@
             updatePlaybackUI();
           }
         });
-        panel.querySelector('#vtf-selector').addEventListener('change', e => {
+        panel.querySelector('#msg-selector').addEventListener('change', e => {
           config.selector = e.target.value.trim(); saveConfig(); startObserving();
         });
-        panel.querySelector('#vtf-pick').addEventListener('click', startPicker);
-        panel.querySelector('#vtf-redetect').addEventListener('click', () => {
+        panel.querySelector('#msg-pick').addEventListener('click', startPicker);
+        panel.querySelector('#msg-redetect').addEventListener('click', () => {
           config.selector = ''; saveConfig();
           selectorInput.value = '';
           startObserving();
         });
-        panel.querySelector('#vtf-clear').addEventListener('click', () => {
+        panel.querySelector('#msg-clear').addEventListener('click', () => {
           config.selector = ''; saveConfig();
           selectorInput.value = '';
           setStatus('Selector cleared.');
         });
-        panel.querySelector('#vtf-test').addEventListener('click', () => {
-          const u = new SpeechSynthesisUtterance('This is a test of the V T F message reader.');
+        panel.querySelector('#msg-test').addEventListener('click', () => {
+          const u = new SpeechSynthesisUtterance('This is a test of the message reader.');
           u.rate = config.rate; u.volume = config.volume;
           const v = voices.find(v => v.voiceURI === config.voiceURI);
           if (v) u.voice = v;
           try { synth && synth.speak(u); } catch {}
         });
-        panel.querySelector('#vtf-voice').addEventListener('change', e => {
+        panel.querySelector('#msg-voice').addEventListener('change', e => {
           config.voiceURI = e.target.value; saveConfig();
         });
-        panel.querySelector('#vtf-rate').addEventListener('input', e => {
+        panel.querySelector('#msg-rate').addEventListener('input', e => {
           config.rate = parseFloat(e.target.value);
-          panel.querySelector('#vtf-rate-val').textContent = config.rate.toFixed(2);
+          panel.querySelector('#msg-rate-val').textContent = config.rate.toFixed(2);
           saveConfig();
         });
-        panel.querySelector('#vtf-volume').addEventListener('input', e => {
+        panel.querySelector('#msg-volume').addEventListener('input', e => {
           config.volume = parseFloat(e.target.value);
-          panel.querySelector('#vtf-volume-val').textContent = config.volume.toFixed(2);
+          panel.querySelector('#msg-volume-val').textContent = config.volume.toFixed(2);
           saveConfig();
         });
-        panel.querySelector('#vtf-read-sender').addEventListener('change', e => {
+        panel.querySelector('#msg-read-sender').addEventListener('change', e => {
           config.readSender = e.target.checked; saveConfig();
         });
-        panel.querySelector('#vtf-first-name').addEventListener('change', e => {
+        panel.querySelector('#msg-first-name').addEventListener('change', e => {
           config.firstNameOnly = e.target.checked; saveConfig();
         });
-        panel.querySelector('#vtf-announce-time').addEventListener('change', e => {
+        panel.querySelector('#msg-announce-time').addEventListener('change', e => {
           config.announceTime = e.target.checked; saveConfig();
         });
-        panel.querySelector('#vtf-skip-own').addEventListener('change', e => {
+        panel.querySelector('#msg-skip-own').addEventListener('change', e => {
           config.skipOwnMessages = e.target.checked; saveConfig();
         });
-        panel.querySelector('#vtf-username').addEventListener('change', e => {
+        panel.querySelector('#msg-username').addEventListener('change', e => {
           config.myUsername = e.target.value.trim(); saveConfig();
         });
         // Ignore-users textarea (commit on blur or Enter).
-        const ignoreEl = panel.querySelector('#vtf-ignore-users');
+        const ignoreEl = panel.querySelector('#msg-ignore-users');
         const commitIgnore = () => {
           // Normalize: trim each entry, drop empties, join with ', '.
           const arr = ignoreEl.value.split(',').map(s => s.trim()).filter(Boolean);
@@ -804,8 +865,8 @@
           }
         });
         // "Add user" helper field — appends to the list.
-        const addEl = panel.querySelector('#vtf-ignore-add');
-        const addBtn = panel.querySelector('#vtf-ignore-add-btn');
+        const addEl = panel.querySelector('#msg-ignore-add');
+        const addBtn = panel.querySelector('#msg-ignore-add-btn');
         const doAdd = () => {
           const v = (addEl.value || '').trim();
           if (!v) return;
@@ -827,13 +888,13 @@
         });
 
         // Collapse / expand.
-        const collapseBtn = panel.querySelector('#vtf-collapse');
+        const collapseBtn = panel.querySelector('#msg-collapse');
         collapseBtn.addEventListener('click', () => {
           panel.classList.toggle('collapsed');
           collapseBtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
         });
 
-        makeDraggable(panel, panel.querySelector('#vtf-reader-header'));
+        makeDraggable(panel, panel.querySelector('#msg-reader-header'));
         startObserving();
         setInterval(updatePlaybackUI, 1000);
         LOG('UI mounted.');

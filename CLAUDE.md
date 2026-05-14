@@ -6,9 +6,9 @@ Project context for [Claude Code](https://docs.claude.com/en/docs/claude-code). 
 
 ## What this project is
 
-A single-file userscript that reads incoming chat messages aloud on the **VTF (Virtual Trading Floor)** website at `https://vtf.t3live.com/`. Distributed via Tampermonkey/Violentmonkey. No build step, no package manager, no framework.
+A single-file userscript that reads new chat messages aloud on **any website**. Originally built for the **VTF (Virtual Trading Floor)** at `https://vtf.t3live.com/` — the default selector targets VTF's main chat, but the "Pick Message Area" button lets it work on any site. Distributed via Tampermonkey/Violentmonkey. No build step, no package manager, no framework.
 
-The deliverable is **`vtf-message-reader.user.js`** — that is the entire product.
+The deliverable is **`message-reader.user.js`** — that is the entire product.
 
 ---
 
@@ -57,10 +57,10 @@ The DOM order of these elements within `<app-st-compactmessage>` is **not** guar
 
 ## Architecture
 
-The entire script lives inside one IIFE in `vtf-message-reader.user.js`. Sections (in order they appear):
+The entire script lives inside one IIFE in `message-reader.user.js`. Sections (in order they appear):
 
 1. **Boot & guards** — `__vtfReaderLoaded` to prevent double-injection; `waitForBody` to defer until DOM exists.
-2. **Config** — Defaults object, `localStorage` load/save (key: `vtf_reader_config_v1`).
+2. **Config** — Defaults object, `localStorage` load/save (key: `message_reader_config_v1`).
 3. **Speech + playback state machine** — States: `idle` / `playing` / `paused` / `stopped`. Queue array. **Generation counter** (`utteranceGen`) to invalidate stale `onend` callbacks when the user skips or stops.
 4. **Extraction** (`extractMessageFromRoot`) — VTF-specific parsing logic. See "Extraction strategy" below.
 5. **Container detection** (`autoDetectChatContainer`) — Prefers `app-roomscroller`; falls back to walking up from any `app-st-compactmessage` to find a common ancestor.
@@ -125,7 +125,7 @@ So toggling features just adds/removes parts — no special-case branching.
 
 ## Configuration schema
 
-Stored in `localStorage` under key `vtf_reader_config_v1`. Defaults defined in `main()`:
+Stored in `localStorage` under key `message_reader_config_v1`. Defaults defined in `main()`:
 
 ```js
 {
@@ -151,7 +151,7 @@ When adding new config fields, **always update `defaults`** so existing users ge
 
 ## How to make changes
 
-1. Edit `vtf-message-reader.user.js`.
+1. Edit `message-reader.user.js`.
 2. **Bump the `// @version` field** in the metadata block (semver — patch for bugfix, minor for feature, major for breaking).
 3. **Add an entry to `CHANGELOG.md`** with the new version, the date, and a bulleted list of changes.
 4. **Test on a live VTF session**:
@@ -174,10 +174,10 @@ window.__vtfReaderLoaded
 document.getElementById('vtf-reader-panel')
 
 // Inspect current config:
-JSON.parse(localStorage.getItem('vtf_reader_config_v1'))
+JSON.parse(localStorage.getItem('message_reader_config_v1'))
 
 // Reset config:
-localStorage.removeItem('vtf_reader_config_v1'); location.reload();
+localStorage.removeItem('message_reader_config_v1'); location.reload();
 ```
 
 ---
@@ -208,13 +208,13 @@ These are NOT bugs to "fix" without discussion — they're known tradeoffs:
 ## Files in this repo
 
 ```
-vtf-message-reader/
+message-reader/
 ├── README.md                       — user-facing docs
 ├── CLAUDE.md                       — this file (project context for Claude Code)
 ├── CHANGELOG.md                    — version history
 ├── LICENSE                         — MIT
 ├── .gitignore                      — standard
-└── vtf-message-reader.user.js      — the entire product
+└── message-reader.user.js      — the entire product
 ```
 
 ---
