@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Message Reader
 // @namespace    https://github.com/sbcmsbgithub/message-reader
-// @version      1.7.0
+// @version      1.7.1
 // @description  Reads chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
@@ -46,7 +46,7 @@
     const STORAGE_KEY = 'message_reader_config_v1';
     const defaults = {
       enabled: false,
-      allowedUrls: '',          // newline or comma-separated URL patterns; empty = all sites
+      allowedUrls: 'vtf.t3live.com', // default site; add more patterns (one per line) or clear to show everywhere
       selector: 'as-split-area.alert-chat-box.as-split-area:nth-of-type(1) > as-split.as-percent.as-vertical > as-split-area.chat-box.as-split-area:nth-of-type(2) > app-chat > div.chat.d-flex > app-roomscroller',
       rate: 1.0, pitch: 1.0, volume: 1.0,
       voiceURI: '',

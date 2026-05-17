@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.7.1] - 2026-05-17
+
+### Fixed
+- **Panel appearing on every browser tab** — `allowedUrls` now defaults to `vtf.t3live.com` instead of empty. Fresh installs only show the panel on the intended site. Users can add more sites via the "Allowed sites" field in settings, or clear it to show on all sites.
+
+---
+
 ## [1.7.0] - 2026-05-16
 
 ### Added
@@ -129,6 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[1.7.1]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.1
 [1.7.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.0
 [1.6.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.6.0
 [1.5.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.5.0
