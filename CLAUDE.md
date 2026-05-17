@@ -6,7 +6,7 @@ Project context for [Claude Code](https://docs.claude.com/en/docs/claude-code). 
 
 ## What this project is
 
-A single-file userscript that reads new chat messages aloud on **any website**. Originally built for the **VTF (Virtual Trading Floor)** at `https://vtf.t3live.com/` — the default selector targets VTF's main chat, but the "Pick Message Area" button lets it work on any site. Distributed via Tampermonkey/Violentmonkey. No build step, no package manager, no framework.
+A single-file userscript that reads new chat messages aloud on **any website**. The default container selector targets the Angular-based chat layout used on the primary target site, but the "Pick Message Area" button lets it work on any site. Distributed via Tampermonkey/Violentmonkey. No build step, no package manager, no framework.
 
 The deliverable is **`message-reader.user.js`** — that is the entire product.
 
@@ -21,13 +21,13 @@ The deliverable is **`message-reader.user.js`** — that is the entire product.
   - `SpeechSynthesis` (Web Speech API) — for text-to-speech.
   - `localStorage` — for persisting user settings.
 - **No dependencies.** No npm, no bundler, no transpiler. Ship the file as-is.
-- **No tests.** The script runs in a live browser against a third-party site; testing means loading it in Tampermonkey and observing behavior on VTF.
+- **No tests.** The script runs in a live browser against a third-party site; testing means loading it in Tampermonkey and observing behavior on the target site.
 
 ---
 
-## Target site: VTF (Virtual Trading Floor)
+## Primary target site DOM structure
 
-VTF is an **Angular Single Page Application** served from `https://vtf.t3live.com/`. The page shell (`index.html`) is just `<app-root></app-root>`; everything else is rendered at runtime by a bundled JavaScript file (`main.<hash>.js`).
+The primary target site is an **Angular Single Page Application**. The page shell (`index.html`) is just `<app-root></app-root>`; everything else is rendered at runtime by a bundled JavaScript file (`main.<hash>.js`).
 
 ### Critical DOM elements we rely on
 
@@ -42,13 +42,13 @@ VTF is an **Angular Single Page Application** served from `https://vtf.t3live.co
 Each message renders visually as:
 
 ```
-[6:05 PM]  Joshua Lefler  T3TG  i shorted some $AMD here
+[6:05 PM]  Alice Smith  ADMIN  hello everyone
 ```
 
 Components:
 - **Timestamp** in brackets: `[6:05 PM]` (sometimes appears unbracketed as `6:05 PM`).
-- **Sender** display name: `Joshua Lefler` (first + last, sometimes single name).
-- **Badges**: Short pills like `T3TG`, `ADMIN`, `MOD`, `VIP`, `PRO`, `OWNER`, `STAFF`, `TEAM`. Currently treated as noise.
+- **Sender** display name: `Alice Smith` (first + last, sometimes single name).
+- **Badges**: Short pills like `ADMIN`, `MOD`, `VIP`, `PRO`, `OWNER`, `STAFF`, `TEAM`. Currently treated as noise.
 - **Body**: The actual message text.
 
 The DOM order of these elements within `<app-st-compactmessage>` is **not** guaranteed to match the visual order — different rendering paths put the sender in the avatar tooltip AND in the visible label, which is why the extractor strips the sender from the body **repeatedly** (see `extractMessageFromRoot` in the script).
@@ -59,10 +59,10 @@ The DOM order of these elements within `<app-st-compactmessage>` is **not** guar
 
 The entire script lives inside one IIFE in `message-reader.user.js`. Sections (in order they appear):
 
-1. **Boot & guards** — `__vtfReaderLoaded` to prevent double-injection; `waitForBody` to defer until DOM exists.
+1. **Boot & guards** — `__messageReaderLoaded` to prevent double-injection; `waitForBody` to defer until DOM exists.
 2. **Config** — Defaults object, `localStorage` load/save (key: `message_reader_config_v1`).
 3. **Speech + playback state machine** — States: `idle` / `playing` / `paused` / `stopped`. Queue array. **Generation counter** (`utteranceGen`) to invalidate stale `onend` callbacks when the user skips or stops.
-4. **Extraction** (`extractMessageFromRoot`) — VTF-specific parsing logic. See "Extraction strategy" below.
+4. **Extraction** (`extractMessageFromRoot`) — Angular-specific parsing logic. See "Extraction strategy" below.
 5. **Container detection** (`autoDetectChatContainer`) — Prefers `app-roomscroller`; falls back to walking up from any `app-st-compactmessage` to find a common ancestor.
 6. **Observer + dedupe** — MutationObserver with a 200-entry recent-spoken set keyed by `sender|body`.
 7. **Element picker** — Click-to-select fallback if auto-detection fails. Builds a CSS selector using id/class/nth-of-type.
@@ -73,7 +73,7 @@ The entire script lives inside one IIFE in `message-reader.user.js`. Sections (i
 
 ### Extraction strategy
 
-VTF's DOM duplicates the sender name in some renderings (avatar tooltip + visible label). The extractor handles this with three passes:
+The Angular SPA's DOM duplicates the sender name in some renderings (avatar tooltip + visible label). The extractor handles this with three passes:
 
 1. **Get sender from DOM** via selector matching `*sender*`, `*author*`, `*username*`, etc.
 2. **Capture the first timestamp** seen anywhere in `innerText` (for the optional "announce time" feature).
@@ -115,10 +115,10 @@ So toggling features just adds/removes parts — no special-case branching.
 ## Code conventions used in this file
 
 - **Single IIFE.** Everything is inside `(function () { 'use strict'; … })()` to keep the global namespace clean.
-- **`LOG` / `ERR` helpers** at the top — every notable action logs `[VTF Reader] …` to the console for debuggability.
-- **Defensive `try/catch`** around anything that touches the DOM, `localStorage`, or `speechSynthesis`. The script must never throw in a way that breaks VTF.
+- **`LOG` / `ERR` helpers** at the top — every notable action logs `[Message Reader] …` to the console for debuggability.
+- **Defensive `try/catch`** around anything that touches the DOM, `localStorage`, or `speechSynthesis`. The script must never throw in a way that breaks the host page.
 - **Config is the single source of truth.** UI hydrates from config on mount; any UI change writes back to config and `saveConfig()`s immediately.
-- **`!important` on panel positioning** — VTF's own CSS is aggressive and can override our panel's position; `!important` keeps it pinned.
+- **`!important` on panel positioning** — host-page CSS can aggressively override our panel's position; `!important` keeps it pinned.
 - **No external resources.** No CDN imports, no remote fonts. Everything inline so the script works offline / in restricted environments.
 
 ---
@@ -130,16 +130,17 @@ Stored in `localStorage` under key `message_reader_config_v1`. Defaults defined 
 ```js
 {
   enabled: false,           // master switch for queueing new messages
+  allowedUrls: '',          // newline/comma-separated URL patterns; empty = all sites
   selector: '',             // CSS selector for the chat container (empty = auto-detect)
   rate: 1.0,                // speech rate (0.5 – 2.0)
   pitch: 1.0,               // speech pitch (0 – 2)
   volume: 1.0,              // speech volume (0 – 1)
   voiceURI: '',             // selected SpeechSynthesisVoice.voiceURI
   readSender: true,         // prepend sender name to spoken text
-  firstNameOnly: true,      // "Joshua Lefler" → "Joshua"
+  firstNameOnly: true,      // "Alice Smith" → "Alice"
   announceTime: false,      // prepend timestamp to spoken text
   skipOwnMessages: true,    // filter using `myUsername`
-  myUsername: '',           // user's own VTF display name
+  myUsername: '',           // user's own display name
   ignoreUsers: '',          // comma-separated list of usernames to skip
   maxLength: 400,           // truncate spoken text past this many chars
 }
@@ -154,10 +155,10 @@ When adding new config fields, **always update `defaults`** so existing users ge
 1. Edit `message-reader.user.js`.
 2. **Bump the `// @version` field** in the metadata block (semver — patch for bugfix, minor for feature, major for breaking).
 3. **Add an entry to `CHANGELOG.md`** with the new version, the date, and a bulleted list of changes.
-4. **Test on a live VTF session**:
+4. **Test on a live session**:
    - Open Tampermonkey dashboard → edit the installed script → paste the new contents → save.
-   - Hard refresh VTF (`Ctrl+Shift+R`).
-   - Open DevTools console; look for `[VTF Reader] UI mounted.` and any errors.
+   - Hard refresh the target tab (`Ctrl+Shift+R`).
+   - Open DevTools console; look for `[Message Reader] UI mounted.` and any errors.
    - Verify the panel renders correctly.
    - Verify a new message gets read aloud as expected.
    - Verify Start/Pause/Skip/Stop all work.
@@ -168,10 +169,10 @@ When adding new config fields, **always update `defaults`** so existing users ge
 
 ```js
 // Is the script loaded?
-window.__vtfReaderLoaded
+window.__messageReaderLoaded
 
 // Is the panel mounted?
-document.getElementById('vtf-reader-panel')
+document.getElementById('msg-reader-panel')
 
 // Inspect current config:
 JSON.parse(localStorage.getItem('message_reader_config_v1'))
@@ -188,8 +189,8 @@ localStorage.removeItem('message_reader_config_v1'); location.reload();
 - **No network calls.** The script must not phone home, fetch fonts, or load external CSS. Everything inline.
 - **No frameworks.** No jQuery, React, Vue, etc. Vanilla DOM only.
 - **No bundler.** No npm, no webpack, no rollup. The source file IS the artifact.
-- **Don't break VTF.** Wrap risky operations in try/catch. The script lives inside the customer's trading session; it must never throw an uncaught error that could destabilize the page.
-- **Keep the `@match` patterns conservative.** Currently matches `https://vtf.t3live.com/*` and `https://*.t3live.com/*`. Don't broaden these — the script has no business running on unrelated sites.
+- **Don't break the host page.** Wrap risky operations in try/catch. The script runs inside someone's active browser session; it must never throw an uncaught error that could destabilize the page.
+- **Use `allowedUrls` to restrict activation.** The `@match` is `*://*/*` so Tampermonkey can inject everywhere, but configure `allowedUrls` to limit which sites the panel actually mounts on.
 
 ---
 
@@ -199,8 +200,8 @@ These are NOT bugs to "fix" without discussion — they're known tradeoffs:
 
 - **Chrome speech synthesis 15-second cutoff** — known browser bug where long utterances get truncated. Could be worked around by chunking long messages and queueing the pieces. Current `maxLength: 400` mitigates this in practice.
 - **Voice list depends on the OS.** Windows has limited voices; macOS / Linux have more. We don't ship voices.
-- **`app-st-compactmessage` is the only message component we handle.** If VTF adds other message types (e.g., system messages, polls, images), they'll be silently ignored. Generally OK; revisit if T3 adds new message kinds.
-- **Picker doesn't survive Angular re-renders perfectly.** The manual selector picker builds a CSS path from id/class/nth-of-type, but Angular's hashed class names can shift between deployments. Auto-detect (which keys off the stable `app-roomscroller` tag) is more durable; recommend users clear the manual selector if a VTF update breaks things.
+- **`app-st-compactmessage` is the only Angular message component we handle.** Other message types (system messages, polls, images) are silently ignored.
+- **Picker doesn't survive Angular re-renders perfectly.** The manual selector picker builds a CSS path from id/class/nth-of-type, but Angular's hashed class names can shift between deployments. Auto-detect (which keys off the stable `app-roomscroller` tag) is more durable; recommend users clear the manual selector if a site update breaks things.
 - **No keyboard shortcuts.** Could add hotkeys (e.g., space to pause, → to skip) — has been requested informally.
 
 ---
@@ -223,5 +224,5 @@ message-reader/
 
 - The shipped product is **one file**. Resist the urge to refactor into multiple files.
 - Userscripts are read by humans pasting them into Tampermonkey. Optimize for **readability of the single file** over architectural cleanliness.
-- When VTF's DOM changes, prefer fixing the **selector** or **extraction** logic over adding new abstraction.
-- Always assume the script is running in production for someone trading real money. Bugs that crash the script or spam audio could cost them real time and money. Be conservative.
+- When the target site's DOM changes, prefer fixing the **selector** or **extraction** logic over adding new abstraction.
+- Be conservative. Bugs that crash the script or spam audio disrupt the user's active session.

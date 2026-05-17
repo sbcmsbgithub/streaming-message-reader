@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.7.0] - 2026-05-16
+
+### Added
+- **URL allowlist** — new `allowedUrls` setting (textarea in settings panel). Enter URL keywords or patterns (one per line); the panel only mounts on matching sites. Leave empty to show on all sites. Includes an "+ Add this site" button that appends the current hostname in one click.
+- **`TS_LEADING` safety-net regex** — strips any bare time (`HH:MM` with or without AM/PM) from the very start of the extracted body, catching timestamps that `TS_BARE` missed because they lacked an AM/PM suffix.
+- **Double-announcement safety net in `handleNode`** — after extraction, re-strips the sender name and any leading timestamp from the body before assembling the spoken string.
+
+### Changed
+- **Settings panel starts collapsed** — playback controls are always visible; click `▸` in the header to expand settings. Reduces visual noise on load.
+- **Rate and Volume sliders are now side by side** (2-column grid), saving vertical space.
+- **Four option checkboxes arranged in a 2×2 grid**: Sender name / First name only / Timestamp / Skip own msgs — with shorter labels to fit the compact layout.
+- **Checkbox labels shortened**: "Announce sender name" → "Sender name", "First name only (e.g. …)" → "First name only", "Announce timestamp (e.g. …)" → "Timestamp", "Skip my own messages" → "Skip own msgs".
+- Removed all `t3live.com` URL references from README, CHANGELOG, CLAUDE.md, and SETUP.md. The project is fully generic.
+- CLAUDE.md console probe examples updated to match current panel ID (`msg-reader-panel`) and guard flag (`__messageReaderLoaded`).
+- `stripSenderFromStart` extracted as a named helper to avoid duplicated do-while pattern across VTF and generic extractors.
+
+---
+
 ## [1.6.0] - 2026-05-14
 
 ### Added
@@ -88,7 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [1.1.0] - 2026-05-13
 
 ### Added
-- VTF-specific `@match` patterns (`https://vtf.t3live.com/*`, `https://*.t3live.com/*`).
+- Site-specific `@match` patterns for the primary target site.
 - Auto-detection of the chat container using Angular component patterns and class-name heuristics.
 - Retry loop for chat container detection (every 3s until found).
 - "Auto-detect" and "Clear Selector" buttons.
@@ -111,6 +129,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[1.7.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.0
 [1.6.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.6.0
 [1.5.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.5.0
 [1.4.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.4.0
