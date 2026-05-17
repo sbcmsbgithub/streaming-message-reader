@@ -2,7 +2,7 @@
 
 A Tampermonkey/Violentmonkey userscript that reads new chat messages aloud on **any website** using the browser's built-in text-to-speech, with a floating control panel for playback (Start / Pause / Skip / Stop) and per-user filtering.
 
-Originally built for the **VTF (Virtual Trading Floor — [vtf.t3live.com](https://vtf.t3live.com/))** trading chat room. The default container selector points to VTF's main chat, so VTF users need zero configuration.
+The default container selector targets the Angular-based chat layout used on the primary site, so users of that site need zero manual configuration.
 
 ---
 
@@ -40,7 +40,7 @@ Originally built for the **VTF (Virtual Trading Floor — [vtf.t3live.com](https
 
 ### Quick start
 1. Click **Test Voice** to confirm audio works.
-2. (Optional) Click **Pick Message Area** and click the chat message list to lock in the exact DOM selector. Auto-detect handles this automatically for VTF and common chat patterns.
+2. (Optional) Click **Pick Message Area** and click the chat message list to lock in the exact DOM selector. Auto-detect handles this automatically for common chat patterns.
 3. Click **▶ Start**.
 
 New messages in the watched container will be spoken as they arrive.
@@ -73,7 +73,7 @@ New messages in the watched container will be spoken as they arrive.
 
 1. Locates the chat container (uses the configured CSS selector, then auto-detects, then falls back to the element picker).
 2. Attaches a `MutationObserver` to that container with `subtree: true`.
-3. When new nodes are added, tries VTF-specific extraction (`<app-st-compactmessage>`) first, then falls back to generic extraction.
+3. When new nodes are added, tries Angular-specific extraction (`<app-st-compactmessage>`) first, then falls back to generic extraction.
 4. Generic extraction: finds sender in `<strong>`, `<b>`, or elements with common class names; strips timestamps; falls back to `name: body` splitting.
 5. De-duplicates against a 200-entry recent-messages buffer.
 6. Filters using the ignore list / self-skip.
@@ -98,7 +98,7 @@ Requires the Web Speech API (`window.speechSynthesis`), available in all modern 
 
 - Voice availability depends on your OS. Windows ships with "Microsoft David" / "Microsoft Zira"; macOS has many more.
 - Chrome stops speech synthesis after ~15 seconds of continuous audio in some versions — usually fine since individual messages are short.
-- On Angular SPAs (like VTF), Angular component names can change between builds. The manual **Pick Message Area** button always works as a fallback.
+- On Angular SPAs, Angular component names can change between builds. The manual **Pick Message Area** button always works as a fallback.
 - The script runs in the top frame only (`@all-frames false`).
 
 ---
@@ -139,5 +139,4 @@ Pull requests welcome. Please:
 
 ## Acknowledgments
 
-- T3 Live for building VTF.
 - The Tampermonkey project for making userscripts trivial to install.

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Message Reader
 // @namespace    https://github.com/sbcmsbgithub/message-reader
-// @version      1.6.0
-// @description  Reads chat messages aloud on any website. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
+// @version      1.7.0
+// @description  Reads chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
 // @run-at       document-idle
@@ -10,10 +10,11 @@
 // ==/UserScript==
 
 /*
- * Message Reader (v1.6)
+ * Message Reader (v1.7)
  * --------------------------
+ *  • Only activates on sites listed in the "Allowed sites" setting.
  *  • Works on any website — pick any element as the watched container.
- *  • Spoken format:  "[<time>] <FirstName>: <message>"
+ *  • Spoken format:  "<FirstName>: <message>"
  *  • Time and sender-name announcement are individually toggleable.
  *  • First-name only by default, can be toggled.
  *  • Playback controls: ▶ Start / ⏸ Pause / ⏭ Skip / ⏹ Stop  (always visible).
@@ -45,15 +46,16 @@
     const STORAGE_KEY = 'message_reader_config_v1';
     const defaults = {
       enabled: false,
+      allowedUrls: '',          // newline or comma-separated URL patterns; empty = all sites
       selector: 'as-split-area.alert-chat-box.as-split-area:nth-of-type(1) > as-split.as-percent.as-vertical > as-split-area.chat-box.as-split-area:nth-of-type(2) > app-chat > div.chat.d-flex > app-roomscroller',
       rate: 1.0, pitch: 1.0, volume: 1.0,
       voiceURI: '',
       readSender: true,
       firstNameOnly: true,
-      announceTime: false,        // NEW: prepend "[10:57 AM]" to spoken text
+      announceTime: false,
       skipOwnMessages: true,
       myUsername: '',
-      ignoreUsers: '',            // NEW: comma-separated list of usernames to skip
+      ignoreUsers: '',
       maxLength: 400,
     };
     let config;
@@ -65,6 +67,23 @@
     const saveConfig = () => {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)); } catch {}
     };
+
+    // -------------------------------------------------------------------------
+    // URL allowlist gate — skip mounting entirely on non-allowed sites
+    // -------------------------------------------------------------------------
+    function isCurrentUrlAllowed() {
+      const list = config.allowedUrls;
+      if (!list || !list.trim()) return true; // empty = allow all sites
+      const href = window.location.href;
+      return list.split(/[\n,]/).map(s => s.trim()).filter(Boolean).some(pattern => {
+        try { return new RegExp(pattern, 'i').test(href); } catch { return href.includes(pattern); }
+      });
+    }
+
+    if (!isCurrentUrlAllowed()) {
+      LOG('Not on an allowed URL — panel not mounted. Add this site via the allowed-sites setting on a permitted page.');
+      return;
+    }
 
     // -------------------------------------------------------------------------
     // Speech + playback
@@ -89,7 +108,7 @@
 
     function enqueueSpeak(text) {
       if (!synth || !text) return;
-      if (playbackState === 'stopped') return;       // user explicitly stopped
+      if (playbackState === 'stopped') return;
       queue.push(text);
       LOG(`queued (${queue.length}):`, text);
       if (playbackState === 'idle') playNext();
@@ -117,7 +136,7 @@
       if (v) u.voice = v;
 
       u.onend = () => {
-        if (myGen !== utteranceGen) return;          // superseded by skip/stop
+        if (myGen !== utteranceGen) return;
         if (playbackState === 'playing') playNext();
       };
       u.onerror = (e) => {
@@ -152,13 +171,10 @@
       }
     }
     function ctrlSkip() {
-      // Stop mid-message. Immediately advance to the next queued message
-      // (or go idle if queue is empty). Does NOT toggle the enable flag.
       if (!synth) return;
-      utteranceGen++;                                 // invalidate pending onend
+      utteranceGen++;
       try { synth.cancel(); } catch {}
       if (playbackState === 'paused') {
-        // Drop current item; user must hit Start to resume the next one.
         playbackState = 'paused';
         setStatus(queue.length ? 'Skipped (still paused).' : 'Skipped. Queue empty.');
       } else {
@@ -187,16 +203,18 @@
     const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, Number(n) || 0));
 
     // -------------------------------------------------------------------------
-    // Message extraction (VTF-specific)
+    // Message extraction (VTF-specific + generic fallback)
     // -------------------------------------------------------------------------
     const BADGE_WORDS = new Set([
       'T3TG', 'ADMIN', 'MOD', 'MODERATOR', 'VIP', 'PRO', 'OWNER',
       'STAFF', 'TEAM', 'T3', 'LIVE'
     ]);
 
-    // Captures both [10:57 AM] and bare 10:57 / 10:57 AM tokens.
     const TS_BRACKET = /\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\s*\]/gi;
     const TS_BARE    = /\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)\b/gi;
+    // Strips a bare time (with or without AM/PM) anchored to the very start of a string —
+    // used as a safety-net pass after the main timestamp stripping.
+    const TS_LEADING = /^\[?\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\]?\s*/i;
 
     function getMessageRoot(node) {
       if (!(node instanceof HTMLElement)) return null;
@@ -206,11 +224,17 @@
 
     function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
+    function stripSenderFromStart(body, sender) {
+      if (!sender) return body;
+      const re = new RegExp('^' + escapeRegex(sender) + '\\s*[:·|>-]?\\s*', 'i');
+      let prev;
+      do { prev = body; body = body.replace(re, '').trim(); } while (body !== prev);
+      return body;
+    }
+
     function extractMessageFromRoot(root) {
       if (!root) return null;
 
-      // Pull sender from a known sender-ish element. (Done first because we
-      // need it to scrub from the body even if it appears in odd positions.)
       let sender = '';
       const senderEl = root.querySelector(
         '[class*="sender" i], [class*="author" i], [class*="username" i], ' +
@@ -223,35 +247,29 @@
         }
       }
 
-      // Capture the FIRST timestamp seen, in case we want to read it aloud.
-      let raw = (root.innerText || '').replace(/\u00a0/g, ' ');
+      let raw = (root.innerText || '').replace(/ /g, ' ');
       let timeText = '';
       const tsMatch = raw.match(TS_BRACKET) || raw.match(TS_BARE);
       if (tsMatch && tsMatch.length) {
         timeText = tsMatch[0].replace(/[\[\]]/g, '').trim();
       }
 
-      // Aggressive cleanup: strip ALL timestamps, normalize whitespace.
       let body = raw.replace(TS_BRACKET, ' ')
                     .replace(TS_BARE, ' ')
                     .replace(/\s+/g, ' ')
                     .trim();
+      // Safety-net: strip any leading bare time that TS_BARE missed (no AM/PM suffix).
+      body = body.replace(TS_LEADING, '').trim();
       if (!body) return null;
 
-      // Strip the sender name from the start of the body — possibly several
-      // times, since some renderings repeat the name (avatar tooltip + label).
-      if (sender) {
-        const senderRe = new RegExp('^' + escapeRegex(sender) + '\\s*[:·|>-]?\\s*', 'i');
-        let prev;
-        do { prev = body; body = body.replace(senderRe, '').trim(); } while (body !== prev);
-      }
+      body = stripSenderFromStart(body, sender);
 
       // Strip leading badge words.
       let words = body.split(/\s+/);
       while (words.length && BADGE_WORDS.has(words[0].toUpperCase())) words.shift();
       body = words.join(' ').trim();
 
-      // Fallback: "Name: body" if we still have no sender.
+      // Fallback: "Name: body" if DOM-based sender extraction failed.
       if (!sender) {
         const m = body.match(/^\s*([^:\n]{1,60}):\s*(.+)/s);
         if (m && !BADGE_WORDS.has(m[1].trim().toUpperCase())) {
@@ -263,12 +281,9 @@
       if (!body) return null;
       if (body.length > config.maxLength) body = body.slice(0, config.maxLength) + '…';
 
-      // Sanity: ignore ultra-short junk.
       if (!sender && body.length < 2) return null;
       if (!sender && BADGE_WORDS.has(body.toUpperCase())) return null;
 
-      // Build the "displayed" sender using first-name-only preference. We
-      // keep the FULL sender for ignore-list matching below.
       const fullSender = sender;
       let spokenSender = sender;
       if (config.firstNameOnly && spokenSender) {
@@ -300,13 +315,11 @@
 
       let body = raw.replace(TS_BRACKET, ' ').replace(TS_BARE, ' ')
                     .replace(/\s+/g, ' ').trim();
+      body = body.replace(TS_LEADING, '').trim();
       if (!body) return null;
 
-      if (sender) {
-        const senderRe = new RegExp('^' + escapeRegex(sender) + '\\s*[:·|>-]?\\s*', 'i');
-        let prev;
-        do { prev = body; body = body.replace(senderRe, '').trim(); } while (body !== prev);
-      }
+      body = stripSenderFromStart(body, sender);
+
       if (!sender) {
         const m = body.match(/^\s*([^:\n]{1,60}):\s*(.+)/s);
         if (m) { sender = m[1].trim(); body = m[2].trim(); }
@@ -326,19 +339,15 @@
       const sLower = fullSender.toLowerCase();
       const sFirst = sLower.split(/\s+/)[0];
 
-      // Existing "skip my own" filter.
       if (config.skipOwnMessages && config.myUsername) {
         const my = config.myUsername.toLowerCase();
         if (sLower === my || sFirst === my.split(/\s+/)[0]) return true;
       }
-      // New comma-separated ignore list.
       if (config.ignoreUsers) {
         const list = config.ignoreUsers.split(',')
           .map(s => s.trim().toLowerCase()).filter(Boolean);
         for (const name of list) {
           if (!name) continue;
-          // Match either full name OR first-name token (e.g. "alice" hides
-          // both "alice" and "alice smith").
           if (sLower === name) return true;
           if (sFirst === name.split(/\s+/)[0]) return true;
         }
@@ -350,7 +359,6 @@
     // Container detection
     // -------------------------------------------------------------------------
     function autoDetectChatContainer() {
-      // VTF-specific
       const scroller = document.querySelector('app-roomscroller');
       if (scroller) return scroller;
       const siteMsgs = document.querySelectorAll('app-st-compactmessage');
@@ -363,7 +371,6 @@
         }
         return siteMsgs[0].parentElement;
       }
-      // Generic: look for common chat/message list patterns
       return document.querySelector(
         '[class*="message-list" i], [class*="chat-list" i], [class*="message-feed" i], ' +
         '[class*="chat-feed" i], [class*="msg-list" i], ' +
@@ -387,6 +394,17 @@
       const isVtf = node.tagName && node.tagName.toLowerCase() === 'app-st-compactmessage';
       const msg = isVtf ? extractMessageFromRoot(node) : extractMessageGeneric(node);
       if (!msg) return;
+
+      // Safety net: if the body still starts with the sender name (extraction may have
+      // missed a duplicate), strip it one more time before speaking.
+      if (msg.body) {
+        msg.body = stripSenderFromStart(msg.body, msg.fullSender);
+        msg.body = stripSenderFromStart(msg.body, msg.sender);
+        // Also clear any timestamp that slipped through at the very start.
+        msg.body = msg.body.replace(TS_LEADING, '').trim();
+      }
+      if (!msg.body) return;
+
       const key = (msg.fullSender + '|' + msg.body).slice(0, 500);
       if (recentSet.has(key)) return;
       markSpoken(key);
@@ -418,7 +436,6 @@
         setStatus('Message container not found — retrying…');
         scheduleRetry(); return;
       }
-      // Seed existing messages so we don't read history.
       const existingMsgs = targetEl.querySelectorAll('app-st-compactmessage');
       if (existingMsgs.length > 0) {
         existingMsgs.forEach(root => {
@@ -435,14 +452,12 @@
         for (const m of mutations) {
           m.addedNodes.forEach(n => {
             if (n.nodeType !== 1) return;
-            // VTF: handle app-st-compactmessage directly or nested
             const root = getMessageRoot(n);
             if (root) { handleNode(root); return; }
             try {
               const siteMsgs = n.querySelectorAll && n.querySelectorAll('app-st-compactmessage');
               if (siteMsgs && siteMsgs.length) { siteMsgs.forEach(handleNode); return; }
             } catch {}
-            // Generic: treat the added element itself as a message
             handleNode(n);
           });
         }
@@ -567,12 +582,10 @@
           margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
           text-transform: uppercase; color: #ff6b35;
         }
-        /* Always-visible playback section */
         #msg-reader-panel .playback {
           padding: 10px 12px; display: grid; gap: 8px;
           border-bottom: 1px solid #2a2f3a;
         }
-        /* Collapsible settings section */
         #msg-reader-panel .settings { padding: 10px 12px; display: grid; gap: 8px; }
         #msg-reader-panel.collapsed .settings { display: none; }
         #msg-reader-panel.collapsed .playback { border-bottom: none; }
@@ -601,6 +614,13 @@
         #msg-reader-panel .toggle {
           display: flex; align-items: center; gap: 8px; cursor: pointer;
           padding: 4px 0; font-size: 12px; color: #e6e9ef;
+        }
+        #msg-reader-panel .cb-grid {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 2px 4px;
+        }
+        #msg-reader-panel .cb-grid .toggle { font-size: 11px; padding: 3px 0; }
+        #msg-reader-panel .rv-row {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
         }
         #msg-reader-panel .pb-state {
           display: flex; align-items: center; justify-content: space-between;
@@ -631,7 +651,7 @@
 
       <header id="msg-reader-header">
         <h3>Message Reader</h3>
-        <button class="collapse-btn" id="msg-collapse" title="Collapse / expand settings">▾</button>
+        <button class="collapse-btn" id="msg-collapse" title="Collapse / expand settings">▸</button>
       </header>
 
       <!-- ALWAYS VISIBLE: playback controls + state -->
@@ -655,6 +675,30 @@
           <span>Read new messages as they arrive</span>
         </label>
 
+        <hr class="sep">
+
+        <!-- 4 toggles in a 2×2 grid -->
+        <div class="cb-grid">
+          <label class="toggle">
+            <input type="checkbox" id="msg-read-sender">
+            <span>Sender name</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="msg-first-name">
+            <span>First name only</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="msg-announce-time">
+            <span>Timestamp</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="msg-skip-own">
+            <span>Skip own msgs</span>
+          </label>
+        </div>
+
+        <hr class="sep">
+
         <label>Message container (CSS selector)
           <input type="text" id="msg-selector" placeholder="auto-detect active…">
         </label>
@@ -670,44 +714,38 @@
         <hr class="sep">
 
         <label>Voice <select id="msg-voice"></select></label>
-        <label>Rate: <span id="msg-rate-val">1.00</span>
-          <input type="range" id="msg-rate" min="0.5" max="2" step="0.05">
-        </label>
-        <label>Volume: <span id="msg-volume-val">1.00</span>
-          <input type="range" id="msg-volume" min="0" max="1" step="0.05">
-        </label>
+
+        <!-- Rate and Volume side by side -->
+        <div class="rv-row">
+          <label>Rate <span id="msg-rate-val">1.00</span>
+            <input type="range" id="msg-rate" min="0.5" max="2" step="0.05">
+          </label>
+          <label>Volume <span id="msg-volume-val">1.00</span>
+            <input type="range" id="msg-volume" min="0" max="1" step="0.05">
+          </label>
+        </div>
 
         <hr class="sep">
 
-        <label class="toggle">
-          <input type="checkbox" id="msg-read-sender">
-          <span>Announce sender name</span>
-        </label>
-        <label class="toggle">
-          <input type="checkbox" id="msg-first-name">
-          <span>First name only (e.g. "Alice" not "Alice Smith")</span>
-        </label>
-        <label class="toggle">
-          <input type="checkbox" id="msg-announce-time">
-          <span>Announce timestamp (e.g. "10:57 AM")</span>
-        </label>
-
-        <hr class="sep">
-
-        <label class="toggle">
-          <input type="checkbox" id="msg-skip-own">
-          <span>Skip my own messages</span>
-        </label>
         <label>My username
-          <input type="text" id="msg-username" placeholder="optional">
+          <input type="text" id="msg-username" placeholder="optional — for skip-own filter">
         </label>
 
-        <label>Skip messages from these users (comma-separated)
+        <label>Skip these users (comma-separated)
           <textarea id="msg-ignore-users" rows="2" placeholder="comma-separated usernames"></textarea>
         </label>
         <div class="ignore-row">
           <input type="text" id="msg-ignore-add" placeholder="add a username…">
           <button id="msg-ignore-add-btn">+ Add</button>
+        </div>
+
+        <hr class="sep">
+
+        <label>Allowed sites (URL keywords, one per line)
+          <textarea id="msg-allowed-urls" rows="3" placeholder="e.g. example.com&#10;&#10;Leave empty to show on all sites."></textarea>
+        </label>
+        <div class="row">
+          <button id="msg-add-site">+ Add this site</button>
         </div>
 
         <div class="status" id="msg-status">Idle.</div>
@@ -752,6 +790,10 @@
     function mountUI() {
       try {
         document.body.appendChild(panel);
+
+        // Start collapsed — user expands when needed.
+        panel.classList.add('collapsed');
+
         selectorInput = panel.querySelector('#msg-selector');
         statusEl      = panel.querySelector('#msg-status');
         pbStateEl     = panel.querySelector('#msg-pb-state');
@@ -776,6 +818,7 @@
         panel.querySelector('#msg-skip-own').checked = config.skipOwnMessages;
         panel.querySelector('#msg-username').value = config.myUsername;
         panel.querySelector('#msg-ignore-users').value = config.ignoreUsers;
+        panel.querySelector('#msg-allowed-urls').value = config.allowedUrls;
         populateVoiceDropdown();
         updatePlaybackUI();
 
@@ -846,10 +889,10 @@
         panel.querySelector('#msg-username').addEventListener('change', e => {
           config.myUsername = e.target.value.trim(); saveConfig();
         });
-        // Ignore-users textarea (commit on blur or Enter).
+
+        // Ignore-users textarea.
         const ignoreEl = panel.querySelector('#msg-ignore-users');
         const commitIgnore = () => {
-          // Normalize: trim each entry, drop empties, join with ', '.
           const arr = ignoreEl.value.split(',').map(s => s.trim()).filter(Boolean);
           config.ignoreUsers = arr.join(', ');
           ignoreEl.value = config.ignoreUsers;
@@ -858,13 +901,10 @@
         };
         ignoreEl.addEventListener('blur', commitIgnore);
         ignoreEl.addEventListener('keydown', e => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            commitIgnore();
-            ignoreEl.blur();
-          }
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitIgnore(); ignoreEl.blur(); }
         });
-        // "Add user" helper field — appends to the list.
+
+        // Quick-add user.
         const addEl = panel.querySelector('#msg-ignore-add');
         const addBtn = panel.querySelector('#msg-ignore-add-btn');
         const doAdd = () => {
@@ -883,8 +923,35 @@
           addEl.value = '';
         };
         addBtn.addEventListener('click', doAdd);
-        addEl.addEventListener('keydown', e => {
-          if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
+        addEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
+
+        // Allowed URLs textarea.
+        const allowedEl = panel.querySelector('#msg-allowed-urls');
+        const commitAllowed = () => {
+          const arr = allowedEl.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+          config.allowedUrls = arr.join('\n');
+          allowedEl.value = config.allowedUrls;
+          saveConfig();
+          setStatus(arr.length ? `Active on ${arr.length} site pattern(s). Reload to apply.` : 'No site filter — active everywhere.');
+        };
+        allowedEl.addEventListener('blur', commitAllowed);
+        allowedEl.addEventListener('keydown', e => {
+          if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); commitAllowed(); }
+        });
+
+        // "Add this site" button — appends current hostname.
+        panel.querySelector('#msg-add-site').addEventListener('click', () => {
+          const host = window.location.hostname;
+          const existing = config.allowedUrls.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+          if (!existing.includes(host)) {
+            existing.push(host);
+            config.allowedUrls = existing.join('\n');
+            allowedEl.value = config.allowedUrls;
+            saveConfig();
+            setStatus(`Added "${host}". Reload page to confirm site gating.`);
+          } else {
+            setStatus(`"${host}" is already in the allowed list.`);
+          }
         });
 
         // Collapse / expand.
