@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Message Reader
 // @namespace    https://github.com/sbcmsbgithub/message-reader
-// @version      1.7.1
+// @version      1.7.2
 // @description  Reads chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
@@ -383,27 +383,31 @@
     // -------------------------------------------------------------------------
     let observer = null, targetEl = null;
     const recentSpoken = [], recentSet = new Set();
-    const RECENT_MAX = 200;
+    // 5000 keeps a full session's worth of messages in the dedup set so that
+    // VTF's virtual scroller re-adding old DOM nodes never triggers a re-read.
+    const RECENT_MAX = 5000;
     const markSpoken = (key) => {
       recentSpoken.push(key);
       recentSet.add(key);
       if (recentSpoken.length > RECENT_MAX) recentSet.delete(recentSpoken.shift());
     };
 
+    // Applies the same safety-net body cleanup used in handleNode.
+    // Must be called before computing the dedup key — both during seeding and
+    // during live handling — so the keys always match.
+    function normalizeMsg(msg) {
+      if (!msg || !msg.body) return null;
+      msg.body = stripSenderFromStart(msg.body, msg.fullSender);
+      msg.body = stripSenderFromStart(msg.body, msg.sender);
+      msg.body = msg.body.replace(TS_LEADING, '').trim();
+      return msg.body ? msg : null;
+    }
+
     function handleNode(node) {
       const isVtf = node.tagName && node.tagName.toLowerCase() === 'app-st-compactmessage';
-      const msg = isVtf ? extractMessageFromRoot(node) : extractMessageGeneric(node);
+      const raw = isVtf ? extractMessageFromRoot(node) : extractMessageGeneric(node);
+      const msg = normalizeMsg(raw);
       if (!msg) return;
-
-      // Safety net: if the body still starts with the sender name (extraction may have
-      // missed a duplicate), strip it one more time before speaking.
-      if (msg.body) {
-        msg.body = stripSenderFromStart(msg.body, msg.fullSender);
-        msg.body = stripSenderFromStart(msg.body, msg.sender);
-        // Also clear any timestamp that slipped through at the very start.
-        msg.body = msg.body.replace(TS_LEADING, '').trim();
-      }
-      if (!msg.body) return;
 
       const key = (msg.fullSender + '|' + msg.body).slice(0, 500);
       if (recentSet.has(key)) return;
@@ -439,7 +443,7 @@
       const existingMsgs = targetEl.querySelectorAll('app-st-compactmessage');
       if (existingMsgs.length > 0) {
         existingMsgs.forEach(root => {
-          const m = extractMessageFromRoot(root);
+          const m = normalizeMsg(extractMessageFromRoot(root));
           if (m) markSpoken((m.fullSender + '|' + m.body).slice(0, 500));
         });
       } else {
