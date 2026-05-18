@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.7.2] - 2026-05-18
+
+### Fixed
+- **Old messages being re-read repeatedly** — two root causes fixed:
+  1. **Key mismatch between seeding and live handling:** startup seeding computed the dedup key from raw extraction output, but `handleNode` applied additional body-cleaning (safety-net strips) before computing its key. If those strips changed the body text the keys differed, so VTF's virtual scroller re-adding a DOM node would bypass the dedup check and re-queue the message. Fixed by extracting a `normalizeMsg()` helper that is called in both places, guaranteeing identical keys.
+  2. **`RECENT_MAX` too small:** with a cap of 200, an active session evicted old messages from the dedup set well within a normal trading day. When VTF's virtual scroller re-inserted those DOM nodes they were no longer in the set and were re-read. Cap raised to 5000.
+
+---
+
 ## [1.7.1] - 2026-05-17
 
 ### Fixed
@@ -136,6 +145,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[1.7.2]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.2
 [1.7.1]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.1
 [1.7.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.0
 [1.6.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.6.0
