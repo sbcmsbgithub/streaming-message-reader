@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.7.4] - 2026-05-18
+
+### Fixed
+- **Date stamp read aloud before message body** — the chat UI injects a date string (e.g. "May 18") into each message element's `innerText`. This appeared in the body after timestamp stripping, blocking the sender-name strip and causing spoken output like "Alice May 18 Alice Smith hello". Added `DATE_RE` (matches `Month Day` and `Month Day, Year` patterns) applied in both extractors and in `normalizeMsg`, so dates are removed before the sender strip runs and before the dedup key is computed.
+
+---
+
 ## [1.7.3] - 2026-05-18
 
 ### Added
@@ -152,6 +159,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[1.7.4]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.4
 [1.7.3]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.3
 [1.7.2]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.2
 [1.7.1]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.1
