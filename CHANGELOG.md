@@ -9,7 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [1.7.4] - 2026-05-18
 
 ### Fixed
-- **Date stamp read aloud before message body** — the chat UI injects a date string (e.g. "May 18") into each message element's `innerText`. This appeared in the body after timestamp stripping, blocking the sender-name strip and causing spoken output like "Alice May 18 Alice Smith hello". Added `DATE_RE` (matches `Month Day` and `Month Day, Year` patterns) applied in both extractors and in `normalizeMsg`, so dates are removed before the sender strip runs and before the dedup key is computed.
+- **Sender name announced twice** (`"Alice: Alice: hello everyone"`) — two separate fixes:
+  1. `stripSenderFromStart` now uses `\W*` after the sender name instead of a narrow character class (`[:·|>-]?`). This absorbs any separator (colon, dash, unicode punctuation, etc.) regardless of what the chat UI inserts.
+  2. Both extractors and `normalizeMsg` now explicitly try a first-name-only strip after the full-name strip. VTF formats the message body as `"FirstName: message"` even when the sender element contains the full name, so stripping just `"Alice Smith"` leaves `"Alice: hello"` in the body. The additional first-name pass removes it.
+- **Date stamp read aloud before message body** — the chat UI injects a date string (e.g. "May 18") into each message element's `innerText`. This appeared in the body after timestamp stripping, blocking the sender-name strip and causing spoken output like `"Alice May 18 Alice Smith hello"`. Added `DATE_RE` (matches `Month Day` and `Month Day, Year` patterns) applied in both extractors and in `normalizeMsg`, so dates are removed before the sender strip runs and before the dedup key is computed.
 
 ---
 

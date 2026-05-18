@@ -231,7 +231,9 @@
 
     function stripSenderFromStart(body, sender) {
       if (!sender) return body;
-      const re = new RegExp('^' + escapeRegex(sender) + '\\s*[:·|>-]?\\s*', 'i');
+      // \W* after the name absorbs any separator (colon, dash, space, etc.)
+      // without restricting to a narrow character class.
+      const re = new RegExp('^' + escapeRegex(sender) + '\\W*', 'i');
       let prev;
       do { prev = body; body = body.replace(re, '').trim(); } while (body !== prev);
       return body;
@@ -269,6 +271,10 @@
       if (!body) return null;
 
       body = stripSenderFromStart(body, sender);
+      // Also strip first-name only — VTF can format the body as "FirstName: message"
+      // even when the sender element contains the full name.
+      const senderFirst = sender.split(/\s+/)[0];
+      if (senderFirst !== sender) body = stripSenderFromStart(body, senderFirst);
 
       // Strip leading badge words.
       let words = body.split(/\s+/);
@@ -326,6 +332,8 @@
       if (!body) return null;
 
       body = stripSenderFromStart(body, sender);
+      const senderFirst = sender.split(/\s+/)[0];
+      if (senderFirst !== sender) body = stripSenderFromStart(body, senderFirst);
 
       if (!sender) {
         const m = body.match(/^\s*([^:\n]{1,60}):\s*(.+)/s);
@@ -407,6 +415,12 @@
       msg.body = msg.body.replace(DATE_RE, ' ').replace(/\s+/g, ' ').trim();
       msg.body = stripSenderFromStart(msg.body, msg.fullSender);
       msg.body = stripSenderFromStart(msg.body, msg.sender);
+      // Extra pass with just the first name of fullSender — covers the case where
+      // VTF formats the body as "FirstName: message" even when fullSender is a full name.
+      const firstName = (msg.fullSender || '').split(/\s+/)[0];
+      if (firstName && firstName !== msg.fullSender && firstName !== msg.sender) {
+        msg.body = stripSenderFromStart(msg.body, firstName);
+      }
       msg.body = msg.body.replace(TS_LEADING, '').trim();
       return msg.body ? msg : null;
     }
