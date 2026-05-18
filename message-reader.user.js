@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Message Reader
 // @namespace    https://github.com/sbcmsbgithub/message-reader
-// @version      1.7.3
+// @version      1.7.4
 // @description  Reads chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
@@ -217,6 +217,9 @@
     const TS_LEADING = /^\[?\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\]?\s*/i;
     // Matches http/https URLs and bare www. links — replaced with "URL posted" before speaking.
     const URL_RE = /https?:\/\/\S+|www\.\S+/gi;
+    // Matches date stamps like "May 18" or "May 18, 2026" injected by the chat UI into
+    // the element's innerText — stripped from the body before speaking.
+    const DATE_RE = /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:,?\s*\d{4})?\b/gi;
 
     function getMessageRoot(node) {
       if (!(node instanceof HTMLElement)) return null;
@@ -258,6 +261,7 @@
 
       let body = raw.replace(TS_BRACKET, ' ')
                     .replace(TS_BARE, ' ')
+                    .replace(DATE_RE, ' ')
                     .replace(/\s+/g, ' ')
                     .trim();
       // Safety-net: strip any leading bare time that TS_BARE missed (no AM/PM suffix).
@@ -316,6 +320,7 @@
       if (tsMatch && tsMatch.length) timeText = tsMatch[0].replace(/[\[\]]/g, '').trim();
 
       let body = raw.replace(TS_BRACKET, ' ').replace(TS_BARE, ' ')
+                    .replace(DATE_RE, ' ')
                     .replace(/\s+/g, ' ').trim();
       body = body.replace(TS_LEADING, '').trim();
       if (!body) return null;
@@ -399,6 +404,7 @@
     // during live handling — so the keys always match.
     function normalizeMsg(msg) {
       if (!msg || !msg.body) return null;
+      msg.body = msg.body.replace(DATE_RE, ' ').replace(/\s+/g, ' ').trim();
       msg.body = stripSenderFromStart(msg.body, msg.fullSender);
       msg.body = stripSenderFromStart(msg.body, msg.sender);
       msg.body = msg.body.replace(TS_LEADING, '').trim();
