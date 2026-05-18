@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.7.5] - 2026-05-18
+
+### Changed
+- **`readSender` now defaults to `false`** — only the message body is spoken. The sender name toggle remains available in settings for users who want it.
+
+### Fixed
+- **Catch-all name prefix strip** — added a final regex in `normalizeMsg` that removes any `"Name: "` or `"First Last: "` pattern left at the start of the body after all sender-specific stripping passes. This covers the case where VTF injects the username directly into the message body element in a format none of the targeted strips caught.
+
+---
+
 ## [1.7.4] - 2026-05-18
 
 ### Fixed
@@ -162,6 +172,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[1.7.5]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.5
 [1.7.4]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.4
 [1.7.3]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.3
 [1.7.2]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.2
