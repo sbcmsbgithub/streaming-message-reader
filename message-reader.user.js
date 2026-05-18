@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Message Reader
 // @namespace    https://github.com/sbcmsbgithub/message-reader
-// @version      1.7.4
+// @version      1.7.5
 // @description  Reads chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
@@ -50,7 +50,7 @@
       selector: 'as-split-area.alert-chat-box.as-split-area:nth-of-type(1) > as-split.as-percent.as-vertical > as-split-area.chat-box.as-split-area:nth-of-type(2) > app-chat > div.chat.d-flex > app-roomscroller',
       rate: 1.0, pitch: 1.0, volume: 1.0,
       voiceURI: '',
-      readSender: true,
+      readSender: false,
       firstNameOnly: true,
       announceTime: false,
       skipOwnMessages: true,
@@ -422,6 +422,10 @@
         msg.body = stripSenderFromStart(msg.body, firstName);
       }
       msg.body = msg.body.replace(TS_LEADING, '').trim();
+      // Final catch-all: if a "Name: " or "First Last: " prefix survived all the
+      // sender-specific passes, remove it. Targets the chat UI injecting the
+      // username into the body element itself.
+      msg.body = msg.body.replace(/^[A-Za-z][A-Za-z'-]{0,29}(?:\s+[A-Za-z][A-Za-z'-]{0,29})?:\s+/, '').trim();
       return msg.body ? msg : null;
     }
 
