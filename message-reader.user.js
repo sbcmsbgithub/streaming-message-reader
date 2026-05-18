@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Message Reader
 // @namespace    https://github.com/sbcmsbgithub/message-reader
-// @version      1.7.2
+// @version      1.7.3
 // @description  Reads chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
@@ -215,6 +215,8 @@
     // Strips a bare time (with or without AM/PM) anchored to the very start of a string —
     // used as a safety-net pass after the main timestamp stripping.
     const TS_LEADING = /^\[?\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\]?\s*/i;
+    // Matches http/https URLs and bare www. links — replaced with "URL posted" before speaking.
+    const URL_RE = /https?:\/\/\S+|www\.\S+/gi;
 
     function getMessageRoot(node) {
       if (!(node instanceof HTMLElement)) return null;
@@ -423,7 +425,7 @@
       if (config.announceTime && msg.timeText) parts.push(msg.timeText);
       if (config.readSender && msg.sender)     parts.push(msg.sender + ':');
       parts.push(msg.body);
-      const spoken = parts.join(' ').trim();
+      const spoken = parts.join(' ').replace(URL_RE, 'URL posted').replace(/\s+/g, ' ').trim();
 
       LOG('NEW →', spoken);
       enqueueSpeak(spoken);

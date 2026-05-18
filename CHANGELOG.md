@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.7.3] - 2026-05-18
+
+### Added
+- **URL redaction** — any `http://`, `https://`, or `www.` link in a message is replaced with "URL posted" before being spoken. The full URL is never read aloud.
+
+---
+
 ## [1.7.2] - 2026-05-18
 
 ### Fixed
@@ -145,6 +152,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[1.7.3]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.3
 [1.7.2]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.2
 [1.7.1]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.1
 [1.7.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.0
