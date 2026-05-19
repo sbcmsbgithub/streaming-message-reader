@@ -1,4 +1,4 @@
-# Message Reader
+# Streaming Message Reader
 
 A Tampermonkey/Violentmonkey userscript that reads new chat messages aloud on **any website** using the browser's built-in text-to-speech, with a floating control panel for playback (Start / Pause / Skip / Stop) and per-user filtering.
 
@@ -11,11 +11,14 @@ The default container selector targets the Angular-based chat layout used on the
 - **Works on any website** — use the "Pick Message Area" button to select any element on any page as the message source
 - **Live chat narration** — new messages are spoken as they arrive
 - **Playback controls** — Start, Pause, Skip current message, Stop (clears the queue)
-- **Smart sender formatting** — extracts sender and body from common DOM patterns (`<strong>`, `<b>`, class-name hints, `name: body` fallback)
+- **Smart body extraction** — strips timestamps, date stamps, sender prefixes, and badge words injected by the chat UI
+- **URL redaction** — URLs in messages are replaced with "URL posted" instead of being read aloud
+- **Optional sender name** — toggle whether to prepend the sender's name (off by default)
 - **Optional first-name only** — "Alice Smith" → "Alice"
 - **Optional timestamp announcement** — toggle whether to read "10:57 AM" out loud
 - **Ignore list** — comma-separated usernames to skip (matches full or first name)
 - **Skip-own-messages** — don't read messages you yourself sent
+- **Allowed sites** — restrict the panel to specific URLs; leave empty to show on all sites
 - **Voice / rate / volume picker** — uses any voice installed in your OS
 - **Collapsible UI** — playback controls remain visible while settings collapse
 - **Draggable panel** — move it out of the way
@@ -30,9 +33,9 @@ The default container selector targets the Angular-based chat layout used on the
 2. Open the Tampermonkey dashboard.
 3. Click **+ → Create a new script**.
 4. Delete the template code.
-5. Paste the contents of [`message-reader.user.js`](./message-reader.user.js).
+5. Paste the contents of [`streaming-message-reader.user.js`](./streaming-message-reader.user.js).
 6. Save (`Ctrl+S`).
-7. Open the target site. The orange-bordered **Message Reader** panel appears in the top-right corner.
+7. Open the target site. The orange-bordered **Streaming Message Reader** panel appears in the top-right corner.
 
 ---
 
@@ -59,12 +62,13 @@ New messages in the watched container will be spoken as they arrive.
 | Setting | Default | Description |
 |---|---|---|
 | Read new messages as they arrive | off | Master toggle for queueing new messages |
+| Sender name | off | Prepend the sender's name to every message |
 | First name only | on | Read "Alice" instead of "Alice Smith" |
-| Announce sender name | on | Prepend the sender to every message |
-| Announce timestamp | off | Prepend "10:57 AM" to every message |
-| Skip my own messages | on | Combined with "My username" below |
+| Timestamp | off | Prepend "10:57 AM" to every message |
+| Skip own msgs | on | Combined with "My username" below |
 | My username | empty | Your display name, used for the self-skip filter |
-| Skip messages from these users | empty | Comma-separated ignore list (matches full or first name) |
+| Skip these users | empty | Comma-separated ignore list (matches full or first name) |
+| Allowed sites | primary site | URL patterns — one per line; empty = show on all sites |
 | Voice / Rate / Volume | system default / 1.0 / 1.0 | Standard text-to-speech parameters |
 
 ---
@@ -74,10 +78,10 @@ New messages in the watched container will be spoken as they arrive.
 1. Locates the chat container (uses the configured CSS selector, then auto-detects, then falls back to the element picker).
 2. Attaches a `MutationObserver` to that container with `subtree: true`.
 3. When new nodes are added, tries Angular-specific extraction (`<app-st-compactmessage>`) first, then falls back to generic extraction.
-4. Generic extraction: finds sender in `<strong>`, `<b>`, or elements with common class names; strips timestamps; falls back to `name: body` splitting.
-5. De-duplicates against a 200-entry recent-messages buffer.
+4. Generic extraction: finds sender in `<strong>`, `<b>`, or elements with common class names; strips timestamps and date stamps; falls back to `name: body` splitting.
+5. De-duplicates against a 5000-entry recent-messages buffer.
 6. Filters using the ignore list / self-skip.
-7. Builds the spoken string: `[time] FirstName: message` (parts individually toggleable).
+7. Builds the spoken string from toggleable parts (timestamp, sender, body); replaces URLs with "URL posted".
 8. Pushes onto a queue and feeds the browser's `SpeechSynthesis` one utterance at a time.
 
 A generation counter invalidates pending `onend` callbacks when the user hits Skip or Stop, so playback control is always precise.
@@ -108,11 +112,11 @@ Requires the Web Speech API (`window.speechSynthesis`), available in all modern 
 Single-file userscript — no build step required.
 
 ```bash
-git clone https://github.com/sbcmsbgithub/message-reader.git
-cd message-reader
+git clone https://github.com/sbcmsbgithub/streaming-message-reader.git
+cd streaming-message-reader
 
 # Edit
-vim message-reader.user.js
+vim streaming-message-reader.user.js
 
 # Test: paste the updated source into Tampermonkey's editor and reload the target tab.
 ```

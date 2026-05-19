@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Message Reader
-// @namespace    https://github.com/sbcmsbgithub/message-reader
-// @version      1.7.5
-// @description  Reads chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
+// @name         Streaming Message Reader
+// @namespace    https://github.com/sbcmsbgithub/streaming-message-reader
+// @version      1.8.0
+// @description  Reads live chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
 // @run-at       document-idle
@@ -26,11 +26,11 @@
 (function () {
   'use strict';
 
-  const LOG = (...a) => console.log('[Message Reader]', ...a);
-  const ERR = (...a) => console.error('[Message Reader]', ...a);
+  const LOG = (...a) => console.log('[Streaming Message Reader]', ...a);
+  const ERR = (...a) => console.error('[Streaming Message Reader]', ...a);
 
-  if (window.__messageReaderLoaded) { LOG('Already loaded.'); return; }
-  window.__messageReaderLoaded = true;
+  if (window.__streamingMessageReaderLoaded) { LOG('Already loaded.'); return; }
+  window.__streamingMessageReaderLoaded = true;
 
   function waitForBody(cb, tries = 0) {
     if (document.body) cb();
@@ -680,7 +680,7 @@
       </style>
 
       <header id="msg-reader-header">
-        <h3>Message Reader</h3>
+        <h3>Streaming Message Reader</h3>
         <button class="collapse-btn" id="msg-collapse" title="Collapse / expand settings">▸</button>
       </header>
 
