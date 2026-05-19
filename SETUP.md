@@ -26,14 +26,14 @@ gh auth login
 
 ## 2. Initialize the repo locally
 
-From the `message-reader/` directory:
+From the `streaming-message-reader/` directory:
 
 ```bash
-cd message-reader
+cd streaming-message-reader
 
 git init
 git add .
-git commit -m "Initial commit: Message Reader v1.7.0"
+git commit -m "Initial commit: Streaming Message Reader v1.8.0"
 ```
 
 ---
@@ -46,13 +46,13 @@ Two things to update before pushing:
 
 **b) `CHANGELOG.md`** — At the bottom, replace `YOUR-USERNAME` in the comparison links with your GitHub username.
 
-**c) `message-reader.user.js`** (optional but nice) — Add `@homepage` and `@supportURL` lines to the metadata block so Tampermonkey shows useful links:
+**c) `streaming-message-reader.user.js`** (optional but nice) — Add `@homepage` and `@supportURL` lines to the metadata block so Tampermonkey shows useful links:
 
 ```javascript
-// @homepage     https://github.com/YOUR-USERNAME/message-reader
-// @supportURL   https://github.com/YOUR-USERNAME/message-reader/issues
-// @updateURL    https://raw.githubusercontent.com/YOUR-USERNAME/message-reader/main/message-reader.user.js
-// @downloadURL  https://raw.githubusercontent.com/YOUR-USERNAME/message-reader/main/message-reader.user.js
+// @homepage     https://github.com/YOUR-USERNAME/streaming-message-reader
+// @supportURL   https://github.com/YOUR-USERNAME/streaming-message-reader/issues
+// @updateURL    https://raw.githubusercontent.com/YOUR-USERNAME/streaming-message-reader/main/streaming-message-reader.user.js
+// @downloadURL  https://raw.githubusercontent.com/YOUR-USERNAME/streaming-message-reader/main/streaming-message-reader.user.js
 ```
 
 The `@updateURL` / `@downloadURL` lines enable one-click auto-update in Tampermonkey.
@@ -63,13 +63,13 @@ The `@updateURL` / `@downloadURL` lines enable one-click auto-update in Tampermo
 
 ```bash
 # Create a new public repo and push in one command:
-gh repo create message-reader --public --source=. --remote=origin --push
+gh repo create streaming-message-reader --public --source=. --remote=origin --push
 
 # OR, if you prefer private:
-gh repo create message-reader --private --source=. --remote=origin --push
+gh repo create streaming-message-reader --private --source=. --remote=origin --push
 ```
 
-That's it — your repo is now live at `https://github.com/YOUR-USERNAME/message-reader`.
+That's it — your repo is now live at `https://github.com/YOUR-USERNAME/streaming-message-reader`.
 
 ---
 
@@ -77,9 +77,9 @@ That's it — your repo is now live at `https://github.com/YOUR-USERNAME/message
 
 Once the repo is on GitHub, consider:
 
-- **Topics**: Click "About" → gear icon → add tags like `userscript`, `tampermonkey`, `text-to-speech`, `chat`, `accessibility`.
-- **Description**: Something like *"Reads chat messages aloud in real time using the browser's built-in speech synthesis."*
-- **Release**: Tag v1.7.0 → `gh release create v1.7.0 --title "v1.7.0" --notes-from-tag` (after creating a git tag with `git tag v1.7.0 && git push --tags`).
+- **Topics**: Click "About" → gear icon → add tags like `userscript`, `tampermonkey`, `text-to-speech`, `chat`, `accessibility`, `streaming`.
+- **Description**: Something like *"Reads live chat messages aloud in real time using the browser's built-in speech synthesis."*
+- **Release**: Tag v1.8.0 → `gh release create v1.8.0 --title "v1.8.0" --notes-from-tag` (after creating a git tag with `git tag v1.8.0 && git push --tags`).
 
 ---
 
@@ -88,7 +88,7 @@ Once the repo is on GitHub, consider:
 In the project directory:
 
 ```bash
-cd message-reader
+cd streaming-message-reader
 claude
 ```
 
@@ -109,7 +109,7 @@ Claude Code will automatically read `CLAUDE.md` and have full context on:
 
 Per the conventions in `CLAUDE.md`, when you ask for a change Claude Code will:
 
-1. Edit `message-reader.user.js`.
+1. Edit `streaming-message-reader.user.js`.
 2. Bump the `@version` field in the metadata header.
 3. Add an entry to `CHANGELOG.md`.
 4. Commit with a descriptive message.
@@ -145,14 +145,14 @@ Claude Code can do all of this autonomously if asked.
 ## Files you're shipping
 
 ```
-message-reader/
+streaming-message-reader/
 ├── .gitignore
 ├── CHANGELOG.md
 ├── CLAUDE.md
 ├── LICENSE
 ├── README.md
-├── SETUP.md                      ← this file
-└── message-reader.user.js        ← the entire product
+├── SETUP.md                                ← this file
+└── streaming-message-reader.user.js        ← the entire product
 ```
 
 Once published, end users only need the `.user.js` file (they can grab it from the GitHub raw URL or click "Install" if you ever publish to Greasy Fork).

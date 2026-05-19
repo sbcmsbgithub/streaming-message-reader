@@ -1,8 +1,17 @@
 # Changelog
 
-All notable changes to **Message Reader** are documented here.
+All notable changes to **Streaming Message Reader** are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [1.8.0] - 2026-05-19
+
+### Changed
+- **Project renamed** from `message-reader` to `streaming-message-reader`. Script file renamed to `streaming-message-reader.user.js`. `@name`, `@namespace`, console prefix (`[Streaming Message Reader]`), and window guard flag (`__streamingMessageReaderLoaded`) updated accordingly.
+- GitHub repository renamed to `sbcmsbgithub/streaming-message-reader`.
+- `localStorage` key intentionally kept as `message_reader_config_v1` so existing users retain their settings.
 
 ---
 
@@ -172,16 +181,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-[1.7.5]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.5
-[1.7.4]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.4
-[1.7.3]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.3
-[1.7.2]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.2
-[1.7.1]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.1
-[1.7.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.7.0
-[1.6.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.6.0
-[1.5.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.5.0
-[1.4.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.4.0
-[1.3.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.3.0
-[1.2.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.2.0
-[1.1.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.1.0
-[1.0.0]: https://github.com/sbcmsbgithub/message-reader/releases/tag/v1.0.0
+[1.8.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.8.0
+[1.7.5]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.7.5
+[1.7.4]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.7.4
+[1.7.3]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.7.3
+[1.7.2]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.7.2
+[1.7.1]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.7.1
+[1.7.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.7.0
+[1.6.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.6.0
+[1.5.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.5.0
+[1.4.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.4.0
+[1.3.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.3.0
+[1.2.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.2.0
+[1.1.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.1.0
+[1.0.0]: https://github.com/sbcmsbgithub/streaming-message-reader/releases/tag/v1.0.0
