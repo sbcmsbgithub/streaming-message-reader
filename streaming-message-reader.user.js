@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Streaming Message Reader
 // @namespace    https://github.com/sbcmsbgithub/streaming-message-reader
-// @version      1.8.0
+// @version      1.8.1
 // @description  Reads live chat messages aloud on configured sites. Pick any element as the watched container. Includes playback controls, ignore list, voice/rate/volume settings, and time/first-name options.
 // @match        *://*/*
 // @grant        none
@@ -219,7 +219,9 @@
     const URL_RE = /https?:\/\/\S+|www\.\S+/gi;
     // Matches date stamps like "May 18" or "May 18, 2026" injected by the chat UI into
     // the element's innerText — stripped from the body before speaking.
-    const DATE_RE = /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:,?\s*\d{4})?\b/gi;
+    // No \b boundaries — the Angular DOM can concatenate inline elements without spaces
+    // (e.g. "AliceMay 20"), which breaks \b. The \s+\d{1,2} suffix is specific enough.
+    const DATE_RE = /(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:,?\s*\d{4})?/gi;
 
     function getMessageRoot(node) {
       if (!(node instanceof HTMLElement)) return null;
@@ -422,6 +424,16 @@
         msg.body = stripSenderFromStart(msg.body, firstName);
       }
       msg.body = msg.body.replace(TS_LEADING, '').trim();
+      // Strip individual name words (e.g. leftover last name when full-name match failed).
+      if (msg.fullSender) {
+        msg.fullSender.split(/\s+/).filter(p => p.length > 1).forEach(part => {
+          msg.body = stripSenderFromStart(msg.body, part);
+        });
+      }
+      // Strip any leading badge words that survived extraction.
+      const bw = msg.body.split(/\s+/);
+      while (bw.length && BADGE_WORDS.has(bw[0].toUpperCase())) bw.shift();
+      msg.body = bw.join(' ').trim();
       // Final catch-all: if a "Name: " or "First Last: " prefix survived all the
       // sender-specific passes, remove it. Targets the chat UI injecting the
       // username into the body element itself.

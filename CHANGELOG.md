@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.8.1] - 2026-05-20
+
+### Fixed
+- **Date stamp leaking into spoken body** — `DATE_RE` was using `\b` word boundaries, which silently fail when the Angular DOM renders inline elements without whitespace separators (e.g. `"AliceMay 20"`). Boundaries removed; the `\s+\d{1,2}` suffix is already specific enough to avoid false positives.
+- **Last-name/badge residue in body** — `normalizeMsg` now strips each individual word of the sender's full name from the body start (catches the case where full-name stripping fails because another fragment precedes it), then strips any leading badge words. This closes the loop on messages still read as `FirstName Month Day FullName message`.
+
+---
+
 ## [1.8.0] - 2026-05-19
 
 ### Changed
